@@ -4,6 +4,7 @@ import pandas as pd
 from collections import Counter
 import os
 from sys import getsizeof
+import time
 # import cv2
 
 # To clear print buffer
@@ -125,10 +126,12 @@ inputLength = 1014  # input feature length (the paper used 1014)
 # np.save("encodedQ2s_70_1014", encodedQ2s)
 # print("saved encoded q1 and q2")
 
-print("Loading encodeQs")
-encodedQ1s = np.load("encodedQ1s.npy")
-encodedQ2s = np.load("encodedQ2s.npy")
-
+print("Loading encodedQs")
+encodedQ1s = np.load("encodedQ1s_70_1014.npy")
+encodedQ2s = np.load("encodedQ2s_70_1014.npy")
+print("Loaded encodedQs")
+print(encodedQ1s.shape)
+time.sleep(1)
 
 def createBaseNetworkSmall(inputDim, inputLength):
     baseNetwork = Sequential()

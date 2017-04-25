@@ -1,5 +1,5 @@
 # kaggle-quora-question-pairs
-GitHub repository of my solution to the kaggle competition of Quora Question Pairs - https://www.kaggle.com/c/quora-question-pairs/data
+GitHub repository of my solution to the kaggle competition of Quora Question Pairs - https://www.kaggle.com/c/quora-question-pairs
 
 # References
 
@@ -14,3 +14,4 @@ GitHub repository of my solution to the kaggle competition of Quora Question Pai
 - [A text classification model (in Torch) applying Character-level CNN (in CUDA)](https://github.com/NVIDIA/DIGITS/blob/master/examples/text-classification/text-classification-model.lua)
 - [The Neural Network package in Torch](https://github.com/torch/nn)
 - [FaceNet paper](https://arxiv.org/pdf/1503.03832.pdf)
+- [Siamese network to solve MNIST](https://github.com/fchollet/keras/blob/master/examples/mnist_siamese_graph.py)
