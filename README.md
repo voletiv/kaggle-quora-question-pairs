@@ -15,3 +15,4 @@ GitHub repository of my solution to the kaggle competition of Quora Question Pai
 - [The Neural Network package in Torch](https://github.com/torch/nn)
 - [FaceNet paper](https://arxiv.org/pdf/1503.03832.pdf)
 - [Siamese network to solve MNIST](https://github.com/fchollet/keras/blob/master/examples/mnist_siamese_graph.py)
+- [To compile using AVX, SSE4.2](http://stackoverflow.com/questions/41293077/how-to-compile-tensorflow-with-sse4-2-and-avx-instructions)

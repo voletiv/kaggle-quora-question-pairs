@@ -22,7 +22,7 @@ from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
 from keras.optimizers import SGD
 from keras.initializers import RandomNormal
-from keras.callbacks import LearningRateScheduler, ModelCheckpoint
+from keras.callbacks import LearningRateScheduler, ModelCheckpoint, EarlyStopping
 from keras.utils import np_utils
 from keras.engine.topology import Layer
 
@@ -128,10 +128,13 @@ inputLength = 1014  # input feature length (the paper used 1014)
 
 print("Loading encodedQs")
 encodedQ1s = np.load("encodedQ1s_70_1014.npy")
+print("Loaded encodedQ1s, loading encodedQ2s")
 encodedQ2s = np.load("encodedQ2s_70_1014.npy")
+# encodedQ1s = np.load("encodedQ1sSmall.npy")
+# print("Loaded encodedQ1s, loading encodedQ2s")
+# encodedQ2s = np.load("encodedQ2sSmall.npy")
 print("Loaded encodedQs")
 print(encodedQ1s.shape)
-time.sleep(1)
 
 def createBaseNetworkSmall(inputDim, inputLength):
     baseNetwork = Sequential()
@@ -215,16 +218,53 @@ def stepDecay(epoch):
 
 lRate = LearningRateScheduler(stepDecay)
 
-# Checkpoint
-filepath = "weights-{epoch:02d}-{val_acc:.2f}.hdf5"
-checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1,
-                             save_best_only=True, mode='max')
+# Early stopping
+earlyStop = EarlyStopping(monitor='loss', min_delta=0, patience=0, verbose=0, mode='auto')
 
-# Fit
-callbacks = [checkpoint, lRate]
+# Checkpoint
+filepath = "weights-{epoch:02d}-{loss:.4f}-{acc:.4f}.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1,
+                             save_best_only=True, mode='min')
+
+# Fit options
+callbacks = []
 minibatchSize = 128
-nEpochs = 1
-validationSplit = 0.8
-model.fit([encodedQ1s, encodedQ2s], outputs, batch_size=minibatchSize,
-          epochs=nEpochs, verbose=1, callbacks=callbacks,
-          validation_split=validationSplit)
+nEpochs = 3
+validationSplit = 0.0
+
+# MAKE MINIBATCHES
+
+# Count number of mini-batches
+nOfMinibatches = int(len(outputs)/minibatchSize)
+
+# Make a list of all the indices
+fullIdx = list(range(len(outputs)))
+
+for n in range(nEpochs):
+    print("EPOCH "+str(n+1)+" of "+str(nEpochs))
+
+    # Shuffle the full index
+    np.random.shuffle(fullIdx)
+    # print(fullIdx)
+
+    # For each mini-batch
+    for m in range(nOfMinibatches):
+        print("  minibatch "+str(m+1)+" of "+str(nOfMinibatches))
+        
+        # Compute the starting index of this mini-batch
+        startIdx = m*minibatchSize
+        
+        # Declare sampled inputs and outputs
+        encodedQ1sSample = encodedQ1s[fullIdx[startIdx:startIdx+minibatchSize]]
+        encodedQ2sSample = encodedQ2s[fullIdx[startIdx:startIdx+minibatchSize]]
+        outputsSample = outputs[fullIdx[startIdx:startIdx+minibatchSize]]
+
+        model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample, 
+            batch_size=minibatchSize, epochs=1, verbose=1,
+            validation_split=validationSplit)
+
+    # Evaluate current model
+    print("evaluating current model:")
+    loss, acc = model.evaluate([encodedQ1s, encodedQ2s], outputs)
+    print("saving current weights.")
+    model.save_weights("charCNNPlusWeights-epoch{0:5d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
