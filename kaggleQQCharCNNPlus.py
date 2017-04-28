@@ -229,7 +229,7 @@ checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1,
 # Fit options
 callbacks = []
 minibatchSize = 128
-nEpochs = 3
+nEpochs = 30
 validationSplit = 0.0
 
 # MAKE MINIBATCHES
@@ -240,8 +240,26 @@ nOfMinibatches = int(len(outputs)/minibatchSize)
 # Make a list of all the indices
 fullIdx = list(range(len(outputs)))
 
+# Set up lr decay
+lr = initLR/1.5
+sgd = SGD(lr=lr, momentum=momentum, decay=1e-5, nesterov=True)
+model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
+
+# Load latest weights
+model.load_weights("charCNNPlusWeights-epoch   10-loss0.3401-acc0.8832.hdf5")
+
 for n in range(nEpochs):
     print("EPOCH "+str(n+1)+" of "+str(nEpochs))
+
+    # Skip compleetd epochs
+    if n < 11:
+        continue
+
+    # Decrease learning rate
+    if (n+1) % 5 == 0:
+        lr /= 2.0
+        sgd = SGD(lr=lr, momentum=momentum, decay=1e-5, nesterov=True)
+        model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
     # Shuffle the full index
     np.random.shuffle(fullIdx)
@@ -250,16 +268,16 @@ for n in range(nEpochs):
     # For each mini-batch
     for m in range(nOfMinibatches):
         print("  minibatch "+str(m+1)+" of "+str(nOfMinibatches))
-        
+
         # Compute the starting index of this mini-batch
         startIdx = m*minibatchSize
-        
+
         # Declare sampled inputs and outputs
         encodedQ1sSample = encodedQ1s[fullIdx[startIdx:startIdx+minibatchSize]]
         encodedQ2sSample = encodedQ2s[fullIdx[startIdx:startIdx+minibatchSize]]
         outputsSample = outputs[fullIdx[startIdx:startIdx+minibatchSize]]
 
-        model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample, 
+        model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample,
             batch_size=minibatchSize, epochs=1, verbose=1,
             validation_split=validationSplit)
 
@@ -267,4 +285,4 @@ for n in range(nEpochs):
     print("evaluating current model:")
     loss, acc = model.evaluate([encodedQ1s, encodedQ2s], outputs)
     print("saving current weights.")
-    model.save_weights("charCNNPlusWeights-epoch{0:5d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+    model.save_weights("charCNNPlusWeights-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))

@@ -216,7 +216,7 @@ def stepDecay(epoch):
 lRate = LearningRateScheduler(stepDecay)
 
 # Checkpoint
-filepath = "weights-{epoch:02d}-{val_acc:.2f}.hdf5"
+filepath = "weights-{epoch:02d}-{loss:.4f}-{acc:.4f}.hdf5"
 checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1,
                              save_best_only=True, mode='max')
 
@@ -224,7 +224,7 @@ checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1,
 callbacks = [lRate, checkpoint]
 minibatchSize = 128
 nEpochs = 1
-validationSplit = 0.8
+validationSplit = 0.99
 model.fit([encodedQ1s, encodedQ2s], outputs, batch_size=minibatchSize,
           epochs=nEpochs, verbose=1, callbacks=callbacks,
           validation_split=validationSplit)
