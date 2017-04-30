@@ -216,67 +216,78 @@ with tf.device('/gpu:0'):
     # Compile
     # model.compile(loss=contrastive_loss, optimizer=sgd, metrics=['accuracy'])
     initLR = 0.01
-    momentum = 0.9
-    sgd = SGD(lr=initLR, momentum=momentum, decay=1e-5, nesterov=True)
-    model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
+    newLR = float(initLR/np.power(2, (int(epoch/3))))
+    print("stepDecay: Epoch "+str(epoch)+" ; lr: "+str(newLR))
+    return newLR
 
-    # Halve learning rate for every 3rd epoch
-    def stepDecay(epoch):
-        initLR = 0.01
-        newLR = float(initLR / np.power(2, (int(epoch / 3))))
-        print("stepDecay: Epoch " + str(epoch) + " ; lr: " + str(newLR))
-        return newLR
 
-    lRate = LearningRateScheduler(stepDecay)
+lRate = LearningRateScheduler(stepDecay)
 
-    # Early stopping
-    earlyStop = EarlyStopping(monitor='loss', min_delta=0, patience=0, verbose=0, mode='auto')
+# Early stopping
+earlyStop = EarlyStopping(monitor='loss', min_delta=0, patience=0, verbose=0, mode='auto')
 
-    # Checkpoint
-    filepath = "weights-{epoch:02d}-{loss:.4f}-{acc:.4f}.hdf5"
-    checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1,
-                                 save_best_only=True, mode='min')
+# Checkpoint
+filepath = "weights-{epoch:02d}-{loss:.4f}-{acc:.4f}.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1,
+                             save_best_only=True, mode='min')
 
-    # Fit options
-    callbacks = []
-    minibatchSize = 128
-    nEpochs = 3
-    validationSplit = 0.0
+# Fit options
+callbacks = []
+minibatchSize = 128
+nEpochs = 30
+validationSplit = 0.0
 
-    # MAKE MINIBATCHES
+# MAKE MINIBATCHES
 
-    # Count number of mini-batches
-    nOfMinibatches = int(len(outputs) / minibatchSize)
+# Count number of mini-batches
+nOfMinibatches = int(len(outputs)/minibatchSize)
 
-    # Make a list of all the indices
-    fullIdx = list(range(len(outputs)))
+# Make a list of all the indices
+fullIdx = list(range(len(outputs)))
 
-    for n in range(nEpochs):
-        print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
+# Set up lr decay
+lr = initLR/1.5
+sgd = SGD(lr=lr, momentum=momentum, decay=1e-5, nesterov=True)
+model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
-        # Shuffle the full index
-        np.random.shuffle(fullIdx)
-        # print(fullIdx)
+# Load latest weights
+model.load_weights("charCNNPlusWeights-epoch   10-loss0.3401-acc0.8832.hdf5")
 
-        # For each mini-batch
-        for m in range(nOfMinibatches):
-            print("  minibatch " + str(m + 1) + " of " + str(nOfMinibatches))
+for n in range(nEpochs):
+    print("EPOCH "+str(n+1)+" of "+str(nEpochs))
 
-            # Compute the starting index of this mini-batch
-            startIdx = m * minibatchSize
+    # Skip compleetd epochs
+    if n < 11:
+        continue
 
-            # Declare sampled inputs and outputs
-            encodedQ1sSample = encodedQ1s[fullIdx[startIdx:startIdx + minibatchSize]]
-            encodedQ2sSample = encodedQ2s[fullIdx[startIdx:startIdx + minibatchSize]]
-            outputsSample = outputs[fullIdx[startIdx:startIdx + minibatchSize]]
+    # Decrease learning rate
+    if (n+1) % 5 == 0:
+        lr /= 2.0
+        sgd = SGD(lr=lr, momentum=momentum, decay=1e-5, nesterov=True)
+        model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
-            model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample,
-                      batch_size=minibatchSize, epochs=1, verbose=1,
-                      validation_split=validationSplit)
+    # Shuffle the full index
+    np.random.shuffle(fullIdx)
+    # print(fullIdx)
 
-        # Evaluate current model
-        print("evaluating current model:")
-        loss, acc = model.evaluate([encodedQ1s, encodedQ2s], outputs)
-        print("saving current weights.")
-        model.save_weights(
-            "charCNNPlusWeights-epoch{0:5d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+    # For each mini-batch
+    for m in range(nOfMinibatches):
+        print("  minibatch "+str(m+1)+" of "+str(nOfMinibatches))
+
+        # Compute the starting index of this mini-batch
+        startIdx = m*minibatchSize
+
+        # Declare sampled inputs and outputs
+        encodedQ1sSample = encodedQ1s[fullIdx[startIdx:startIdx+minibatchSize]]
+        encodedQ2sSample = encodedQ2s[fullIdx[startIdx:startIdx+minibatchSize]]
+        outputsSample = outputs[fullIdx[startIdx:startIdx+minibatchSize]]
+
+        model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample,
+            batch_size=minibatchSize, epochs=1, verbose=1,
+            validation_split=validationSplit)
+
+    # Evaluate current model
+    print("evaluating current model:")
+    loss, acc = model.evaluate([encodedQ1s, encodedQ2s], outputs)
+    print("saving current weights.")
+    model.save_weights("charCNNPlusWeights-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
