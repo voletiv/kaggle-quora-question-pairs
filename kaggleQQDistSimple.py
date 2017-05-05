@@ -132,7 +132,7 @@ encodedQ2s = np.load("encodedQ2s_70_1014.npy")
 print("Loaded encodedQs")
 
 
-def createBaseNetworkSmall(inputDim, inputLength):
+def createBaseNetworkSimple(inputDim, inputLength):
     baseNetwork = Sequential()
     baseNetwork.add(Embedding(input_dim=inputDim,
                               output_dim=inputDim, input_length=inputLength))
@@ -144,44 +144,11 @@ def createBaseNetworkSmall(inputDim, inputLength):
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
     baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
         mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
     baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(1024, activation='relu'))
+    baseNetwork.add(Dense(512, activation='relu'))
     baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(1024, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    return baseNetwork
-
-
-def createBaseNetworkLarge(inputDim, inputLength):
-    baseNetwork = Sequential()
-    baseNetwork.add(Embedding(input_dim=inputDim,
-                              output_dim=inputDim, input_length=inputLength))
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(2048, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(2048, activation='relu'))
+    baseNetwork.add(Dense(512, activation='relu'))
     baseNetwork.add(Dropout(0.5))
     return baseNetwork
 
@@ -206,7 +173,7 @@ def contrastive_loss(y_true, y_pred):
                   (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
 
 
-baseNetwork = createBaseNetworkSmall(inputDim, inputLength)
+baseNetwork = createBaseNetworkSimple(inputDim, inputLength)
 # baseNetwork = createBaseNetworkLarge(inputDim, inputLength)
 
 # Inputs
@@ -247,14 +214,17 @@ lRate = LearningRateScheduler(stepDecay)
 
 # # Fit
 # callbacks = [lRate, checkpoint]
+minibatchSize = 100
+nEpochs = 30
+validationSplit = 0.0
+# model.fit([encodedQ1s, encodedQ2s], outputs, batch_size=minibatchSize,
+#           epochs=nEpochs, verbose=1, callbacks=callbacks,
+#           validation_split=validationSplit)
 
 # MAKE MINIBATCHES
 
-minibatchSize = 100
-nEpochs = 30
 nOfQPairs = len(outputs)
-validationSplit = 0.0  # Use this much for validation
-
+validationSplit = 0.7  # Use this much for validation
 encodedTrainQ1s = encodedQ1s[:int((1 - validationSplit) * nOfQPairs)]
 encodedTrainQ2s = encodedQ2s[:int((1 - validationSplit) * nOfQPairs)]
 encodedValQ1s = encodedQ1s[int((1 - validationSplit) * nOfQPairs):]
@@ -304,11 +274,8 @@ for n in range(nEpochs):
 
     # Evaluate current model
     print("evaluating current model:")
-    if valOutputs:
-        loss, acc = model.evaluate([encodedValQ1s, encodedValQ2s], valOutputs)
-    else:
-        loss, acc = model.evaluate([encodedTrainQ1s, encodedTrainQ2s], trainOutputs)
+    loss, acc = model.evaluate([encodedValQ1s, encodedValQ2s], valOutputs)
     print("LOSS = "+str(loss)+"; ACC = "+str(acc))
     print("saving current weights.")
     model.save_weights(
-        "charCNNDistWeights-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+        "charCNNDistSimpleWeights-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
