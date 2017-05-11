@@ -4,27 +4,25 @@ import pandas as pd
 from collections import Counter
 import os
 from sys import getsizeof
+import time
 # import cv2
 
 # To clear print buffer
 # from IPython.display import clear_output
 
 # tensorflow
-import tensorflow as tf
-# with tf.device('/gpu:0'):
+# import tensorflow as tf
+#     with tf.device('/gpu:0'):
 
 # Keras
 from keras import backend as K
 from keras.models import Model, Sequential
 from keras.layers import Input, Conv1D, MaxPooling1D
-from keras.layers import Flatten, Dense, Dropout, Lambda
+from keras.layers import Flatten, Dense, Dropout
 from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
 from keras.optimizers import SGD
 from keras.initializers import RandomNormal
-from keras.callbacks import LearningRateScheduler, ModelCheckpoint
-from keras.utils import np_utils
-from keras.engine.topology import Layer
 
 # Load training and test data
 # Download train.csv and test.csv from https://www.kaggle.com/c/quora-question-pairs/
@@ -186,26 +184,6 @@ def createBaseNetworkLarge(inputDim, inputLength):
     return baseNetwork
 
 
-def euclidean_distance(vects):
-    x, y = vects
-    return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True),
-                            K.epsilon()))
-
-
-def eucl_dist_output_shape(shapes):
-    shape1, shape2 = shapes
-    return (shape1[0], 1)
-
-
-def contrastive_loss(y_true, y_pred):
-    '''Contrastive loss from Hadsell-et-al.'06
-    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-    '''
-    margin = 1
-    return K.mean(y_true * K.square(y_pred) +
-                  (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
-
-
 baseNetwork = createBaseNetworkSmall(inputDim, inputLength)
 # baseNetwork = createBaseNetworkLarge(inputDim, inputLength)
 
@@ -218,40 +196,31 @@ inputB = Input(shape=(inputLength,))
 processedA = baseNetwork(inputA)
 processedB = baseNetwork(inputB)
 
-distance = Lambda(euclidean_distance, output_shape=eucl_dist_output_shape)(
-    [processedA, processedB])
+# Concatenate
+conc = Concatenate()([processedA, processedB])
 
-model = Model([inputA, inputB], distance)
+predictions = Dense(1, activation='sigmoid')(conc)
+
+model = Model([inputA, inputB], predictions)
 
 # Compile
 initLR = 0.01
 momentum = 0.9
 sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
-model.compile(loss=contrastive_loss, optimizer=sgd, metrics=['accuracy'])
-
-
-# Halve learning rate for every 3rd epoch
-def stepDecay(epoch):
-    initLR = 0.01
-    newLR = float(initLR / np.power(2, (int(epoch / 3))))
-    print("stepDecay: Epoch " + str(epoch) + " ; lr: " + str(newLR))
-    return newLR
-
-
-lRate = LearningRateScheduler(stepDecay)
+model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
 # # Checkpoint
 # filepath = "weights-{epoch:02d}-{val_acc:.2f}.hdf5"
 # checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1,
 #                              save_best_only=True, mode='min')
 
-# # Fit
+# # callbacks
 # callbacks = [lRate, checkpoint]
 
 # MAKE MINIBATCHES
 
 minibatchSize = 100
-nEpochs = 30
+nEpochs = 40
 nOfQPairs = len(outputs)
 validationSplit = 0.0  # Use this much for validation
 
@@ -273,14 +242,23 @@ print("nOfMinibatches: "+str(nOfMinibatches))
 # Make a list of all the indices
 fullIdx = list(range(len(trainOutputs)))
 
+# # SKIP: Load weights
+# model.load_weights("charCNNDistWeights-epoch02-loss0.6372-acc0.6308.hdf5")
+
 lr = initLR
 for n in range(nEpochs):
+    print(time.strftime("%c"))
     print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
 
+    # # SKIP:
+    # if n < 3:
+    #     continue
+
+    # Halve LR every 3rd epoch
     if n != 0 and n % 3 == 0:
         lr /= 2
-        sgd = SGD(lr=lr, momentum=momentum, decay=0, nesterov=False)
-        model.compile(loss=contrastive_loss, optimizer=sgd, metrics=['accuracy'])
+        sgd = SGD(lr=lr, momentum=momentum, nesterov=False)
+        model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
     # Shuffle the full index
     np.random.shuffle(fullIdx)
@@ -288,6 +266,7 @@ for n in range(nEpochs):
 
     # For each mini-batch
     for m in range(nOfMinibatches):
+        print(time.strftime("%c"))
         print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
         print("  minibatch " + str(m + 1) + " of " + str(nOfMinibatches))
 
@@ -304,11 +283,13 @@ for n in range(nEpochs):
 
     # Evaluate current model
     print("evaluating current model:")
-    if valOutputs:
+    if len(valOutputs) > 0:
         loss, acc = model.evaluate([encodedValQ1s, encodedValQ2s], valOutputs)
     else:
         loss, acc = model.evaluate([encodedTrainQ1s, encodedTrainQ2s], trainOutputs)
+    print(time.strftime("%c"))
     print("LOSS = "+str(loss)+"; ACC = "+str(acc))
     print("saving current weights.")
     model.save_weights(
-        "charCNNDistWeights-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+        "charCNNDistWeights-SG-BCE-initLR0.01-m0.9-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+#
