@@ -25,7 +25,8 @@ from keras.optimizers import SGD
 from keras.initializers import RandomNormal
 
 # Load training and test data
-# Download train.csv and test.csv from https://www.kaggle.com/c/quora-question-pairs/
+# Download train.csv and test.csv from
+# https://www.kaggle.com/c/quora-question-pairs/
 trainDf = pd.read_csv('kaggleQuoraTrain.csv', sep=',')
 testDf = pd.read_csv('kaggleQuoraTest.csv', sep=',')
 
@@ -233,17 +234,18 @@ valOutputs = outputs[int((1 - validationSplit) * nOfQPairs):]
 
 # Count number of mini-batches
 nOfMinibatches = int(len(trainOutputs) / minibatchSize)
-print("Size of full trainingData: "+str(len(outputs)))
-print("Validation split: "+str(validationSplit))
-print("Size of trainingData: "+str(len(trainOutputs)))
-print("Size of valData: "+str(len(valOutputs)))
-print("nOfMinibatches: "+str(nOfMinibatches))
+print("Size of full trainingData: " + str(len(outputs)))
+print("Validation split: " + str(validationSplit))
+print("Size of trainingData: " + str(len(trainOutputs)))
+print("Size of valData: " + str(len(valOutputs)))
+print("nOfMinibatches: " + str(nOfMinibatches))
 
 # Make a list of all the indices
 fullIdx = list(range(len(trainOutputs)))
 
 # SKIP: Load weights
-model.load_weights("charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch11-loss0.1903-acc0.9262.hdf5")
+model.load_weights(
+    "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch11-loss0.1903-acc0.9262.hdf5")
 
 lr = initLR
 for n in range(nEpochs):
@@ -253,9 +255,10 @@ for n in range(nEpochs):
     # Halve LR every 3rd epoch
     if n != 0 and n % 3 == 0:
         lr /= 2
-        print("lr reduced to "+str(lr))
+        print("lr reduced to " + str(lr))
         sgd = SGD(lr=lr, momentum=momentum, nesterov=False)
-        model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
+        model.compile(loss='binary_crossentropy',
+                      optimizer=sgd, metrics=['accuracy'])
 
     # SKIP:
     if n < 12:
@@ -275,22 +278,25 @@ for n in range(nEpochs):
         startIdx = m * minibatchSize
 
         # Declare sampled inputs and outputs
-        encodedQ1sSample = encodedTrainQ1s[fullIdx[startIdx:startIdx + minibatchSize]]
-        encodedQ2sSample = encodedTrainQ2s[fullIdx[startIdx:startIdx + minibatchSize]]
-        outputsSample = trainOutputs[fullIdx[startIdx:startIdx + minibatchSize]]
+        encodedQ1sSample = encodedTrainQ1s[
+            fullIdx[startIdx:startIdx + minibatchSize]]
+        encodedQ2sSample = encodedTrainQ2s[
+            fullIdx[startIdx:startIdx + minibatchSize]]
+        outputsSample = trainOutputs[
+            fullIdx[startIdx:startIdx + minibatchSize]]
 
         model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample,
                   batch_size=minibatchSize, epochs=1, verbose=1)
 
-    # Evaluate current model
-    print("evaluating current model:")
-    if len(valOutputs) > 0:
-        loss, acc = model.evaluate([encodedValQ1s, encodedValQ2s], valOutputs)
-    else:
-        loss, acc = model.evaluate([encodedTrainQ1s, encodedTrainQ2s], trainOutputs)
-    print(time.strftime("%c"))
-    print("LOSS = "+str(loss)+"; ACC = "+str(acc))
+    # # Evaluate current model
+    # print("evaluating current model:")
+    # if len(valOutputs) > 0:
+    #     loss, acc = model.evaluate([encodedValQ1s, encodedValQ2s], valOutputs)
+    # else:
+    #     loss, acc = model.evaluate([encodedTrainQ1s, encodedTrainQ2s], trainOutputs)
+    # print(time.strftime("%c"))
+    # print("LOSS = "+str(loss)+"; ACC = "+str(acc))
     print("saving current weights.")
     model.save_weights(
-        "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+        "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch{0:02d}.hdf5".format(n))
 #
