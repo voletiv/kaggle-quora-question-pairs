@@ -1,18 +1,24 @@
 # Pre-requisites
 import numpy as np
+print("imported np")
 import pandas as pd
+print("imported pd")
 from collections import Counter
+print("imported counter")
 import os
+print("imported os")
 from sys import getsizeof
 import time
 # import cv2
 
 # tensorflow
 import tensorflow as tf
+print("imported tf")
 # with tf.device('/gpu:0'):
 
 # Keras
 from keras import backend as K
+print("imported keras backend")
 from keras.models import Model, Sequential
 from keras.layers import Input, Conv1D, MaxPooling1D
 from keras.layers import Flatten, Dense, Dropout, Lambda
@@ -20,12 +26,14 @@ from keras.layers.merge import Concatenate
 from keras.layers.embeddings import Embedding
 from keras.optimizers import SGD
 from keras.initializers import RandomNormal
+print("imported all keras")
 
 # Load training and test data
 # Download train.csv and test.csv from
 # https://www.kaggle.com/c/quora-question-pairs/
 trainDf = pd.read_csv('kaggleQuoraTrain.csv', sep=',')
 testDf = pd.read_csv('kaggleQuoraTest.csv', sep=',')
+print("read Dfs")
 
 # Check for any null values
 print(trainDf.isnull().sum())
@@ -143,15 +151,15 @@ sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
 
 # Load weights
 model.load_weights(
-    "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch12-loss0.1367-acc0.9518.hdf5")
+    "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch35-loss0.0467-acc0.9852.hdf5")
 
 # Initialize output
 yTest = -np.ones((len(testQs1), 2)).astype(int)
 
 # Load current preds
-preds = np.loadtxt("preds_0to2100099.csv",
-                   delimiter=",", skiprows=1).astype(int)
-yTest[0:2100099] = preds[0:2100099]
+# preds = np.loadtxt("preds_0to2100099.csv",
+#                   delimiter=",", skiprows=1).astype(int)
+# yTest[0:2100099] = preds[0:2100099]
 
 # To encode questions
 
@@ -177,13 +185,14 @@ nOfQs = len(testQs1)
 subsetLength = 100
 nOfSubsets = int(nOfQs / subsetLength)
 for subset in range(nOfSubsets):
-    if subset < 21001:
-        continue
-    print(time.strftime("%c"))
-    print("Subset " + str(subset + 1) + " of " + str(nOfSubsets))
+    #     if subset < 21001:
+    #         continue
+    #     print(time.strftime("%c"))
+    print("Subset " + str(subset + 1) + " of " + str(nOfSubsets) +
+          " = {0:.2f}".format(float(subset + 1) / nOfSubsets), end='\r')
     startIdx = subset * subsetLength
-    print("  from " + str(startIdx) + " to " +
-          str(startIdx + subsetLength - 1))
+    # print("  from " + str(startIdx) + " to " +
+    #       str(startIdx + subsetLength - 1))
     # Encode subset qs
     encodedTestQ1s = encodeQs(
         testQs1[startIdx:startIdx + subsetLength], inputLength, alphabet)
@@ -195,9 +204,9 @@ for subset in range(nOfSubsets):
           0] = np.array(list(range(startIdx, startIdx + subsetLength)))
     yTest[startIdx:startIdx + subsetLength,
           1] = np.reshape((preds > 0.5).astype(int), (len(preds),))
-    if subset % 1000 == 0:
-        np.savetxt("preds_0to{0}.csv".format(startIdx + subsetLength - 1), yTest,
-                   fmt='%i', delimiter=',', header="test_id,is_duplicate", comments='')
+    # if subset % 1000 == 0:
+    #     np.savetxt("preds_0to{0}.csv".format(startIdx + subsetLength - 1), yTest,
+    #                fmt='%i', delimiter=',', header="test_id,is_duplicate", comments='')
 
 startIdx = nOfSubsets * subsetLength
 endIdx = len(testQs1)
@@ -211,3 +220,5 @@ yTest[startIdx:endIdx, 1] = np.reshape(
 # Save predictions in the format dictated by Kaggle
 np.savetxt("preds_0to{0}.csv".format(endIdx), yTest, fmt='%i',
            delimiter=',', header="test_id,is_duplicate", comments='')
+
+print("Saved predictions.")

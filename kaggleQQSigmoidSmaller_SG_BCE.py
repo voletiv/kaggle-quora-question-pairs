@@ -161,6 +161,24 @@ def createBaseNetworkSmall(inputDim, inputLength):
     return baseNetwork
 
 
+def createBaseNetworkSmaller(inputDim, inputLength):
+    baseNetwork = Sequential()
+    baseNetwork.add(Embedding(input_dim=inputDim,
+                              output_dim=inputDim, input_length=inputLength))
+    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Flatten())
+    baseNetwork.add(Dense(1024, activation='relu'))
+    baseNetwork.add(Dropout(0.5))
+    return baseNetwork
+
+
 def createBaseNetworkLarge(inputDim, inputLength):
     baseNetwork = Sequential()
     baseNetwork.add(Embedding(input_dim=inputDim,
@@ -188,7 +206,7 @@ def createBaseNetworkLarge(inputDim, inputLength):
     return baseNetwork
 
 
-baseNetwork = createBaseNetworkSmall(inputDim, inputLength)
+baseNetwork = createBaseNetworkSmaller(inputDim, inputLength)
 # baseNetwork = createBaseNetworkLarge(inputDim, inputLength)
 
 # Inputs
@@ -302,5 +320,5 @@ for n in range(nEpochs):
     print("LOSS = " + str(loss) + "; ACC = " + str(acc))
     print("saving current weights.")
     model.save_weights(
-        "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+        "charCNNSigmoidSmaller-SG-BCE-initLR0.01-m0.9-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
 #
