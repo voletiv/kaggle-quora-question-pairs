@@ -69,81 +69,49 @@ alphabet = np.load("alphabet.npy")
 alphabet = [str(a) for a in alphabet]
 print(alphabet)
 
-# MODEL
+
+def createSplitBaseNetworkSmall(inputDim, inputLength):
+    baseNetwork = Sequential()
+    baseNetwork.add(Embedding(input_dim=inputDim,
+                              output_dim=inputDim, input_length=inputLength))
+    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    return baseNetwork
+
+baseNetwork = createSplitBaseNetworkSmall(inputDim, inputLength)
 
 # Inputs
 inputA = Input(shape=(inputLength,))
 inputB = Input(shape=(inputLength,))
 
-# One hot encoding
-oheInputA = Lambda(K.one_hot, arguments={
-                   'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputA)
-oheInputB = Lambda(K.one_hot, arguments={
-                   'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputB)
-
-
-def createBaseNetworkSmall(inputDim, inputLength):
-    baseNetwork = Sequential()
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(1024, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(1024, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    return baseNetwork
-
-
-def createBaseNetworkLarge(inputDim, inputLength):
-    baseNetwork = Sequential()
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(2048, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(2048, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    return baseNetwork
-
-
-baseNetwork = createBaseNetworkSmall(inputDim, inputLength)
-# baseNetwork = createBaseNetworkLarge(inputDim, inputLength)
-
 # because we re-use the same instance `base_network`,
 # the weights of the network will be shared across the two branches
-processedA = baseNetwork(oheInputA)
-processedB = baseNetwork(oheInputB)
+processedA = baseNetwork(inputA)
+processedB = baseNetwork(inputB)
 
 # Concatenate
 conc = Concatenate()([processedA, processedB])
 
-predictions = Dense(1, activation='sigmoid')(conc)
+x = Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+    mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05))(conc)
+x = Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+    mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05))(x)
+x = Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+    mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05))(x)
+x = Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+    mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05))(x)
+x = MaxPooling1D(pool_size=3, strides=3)(x)
+x = Flatten()(x)
+x = Dense(1024, activation='relu')(x)
+x = Dropout(0.5)(x)
+x = Dense(1024, activation='relu')(x)
+x = Dropout(0.5)(x)
+
+predictions = Dense(1, activation='sigmoid')(x)
 
 model = Model([inputA, inputB], predictions)
 
@@ -156,7 +124,7 @@ sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
 
 # Load weights
 model.load_weights(
-    "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch35-loss0.0467-acc0.9852.hdf5")
+    "charCNNSigmoidSplit-SG-BCE-initLR0.01-m0.9-epoch06-loss0.3361-acc0.8588.hdf5")
 
 # Initialize output
 yTest = -np.ones((len(testQs1), 2)).astype(int)
@@ -186,9 +154,14 @@ def encodeQs(questions, inputLength, alphabet):
     print("Done encoding.")
     return encodedQs
 
+# encodedTestQ1s = encodeQs(testQs1, inputLength, alphabet)
+# encodedTestQ2s = encodeQs(testQs2, inputLength, alphabet)
+# preds = model.predict([encodedTestQ1s, encodedTestQ2s], verbose=1)
+# yTest = np.reshape((preds > 0.5).astype(int), (len(preds),))
+
 # Encode testdata and make predictions
 nOfQs = len(testQs1)
-subsetLength = 100
+subsetLength = 1000
 nOfSubsets = int(nOfQs / subsetLength)
 for subset in range(nOfSubsets):
     #     if subset < 21001:
@@ -224,7 +197,7 @@ yTest[startIdx:endIdx, 1] = np.reshape(
     (preds > 0.5).astype(int), (len(preds),))
 
 # Save predictions in the format dictated by Kaggle
-np.savetxt("preds_0to{0}.csv".format(endIdx), yTest, fmt='%i',
+np.savetxt("PREDS_SigmoidSplit_epoch??.csv".format(endIdx), yTest, fmt='%i',
            delimiter=',', header="test_id,is_duplicate", comments='')
 
 print("Saved predictions.")

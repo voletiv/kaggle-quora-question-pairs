@@ -107,32 +107,23 @@ def createBaseNetworkSmall(inputDim, inputLength):
     return baseNetwork
 
 
-def createBaseNetworkLarge(inputDim, inputLength):
+def createBaseNetworkSmaller(inputDim, inputLength):
     baseNetwork = Sequential()
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
+    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
     baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(2048, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(2048, activation='relu'))
+    baseNetwork.add(Dense(1024, activation='relu'))
     baseNetwork.add(Dropout(0.5))
     return baseNetwork
 
-
-baseNetwork = createBaseNetworkSmall(inputDim, inputLength)
+baseNetwork = createBaseNetworkSmaller(inputDim, inputLength)
 # baseNetwork = createBaseNetworkLarge(inputDim, inputLength)
 
 # because we re-use the same instance `base_network`,
@@ -156,7 +147,7 @@ sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
 
 # Load weights
 model.load_weights(
-    "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch35-loss0.0467-acc0.9852.hdf5")
+    "charCNNSigmoidSmaller-SG-BCE-initLR0.01-m0.9-epoch06-loss0.3361-acc0.8588.hdf5")
 
 # Initialize output
 yTest = -np.ones((len(testQs1), 2)).astype(int)
@@ -186,45 +177,49 @@ def encodeQs(questions, inputLength, alphabet):
     print("Done encoding.")
     return encodedQs
 
-# Encode testdata and make predictions
-nOfQs = len(testQs1)
-subsetLength = 100
-nOfSubsets = int(nOfQs / subsetLength)
-for subset in range(nOfSubsets):
-    #     if subset < 21001:
-    #         continue
-    #     print(time.strftime("%c"))
-    print("Subset " + str(subset + 1) + " of " + str(nOfSubsets) +
-          " = {0:.2f}".format(float(subset + 1) / nOfSubsets), end='\r')
-    startIdx = subset * subsetLength
-    # print("  from " + str(startIdx) + " to " +
-    #       str(startIdx + subsetLength - 1))
-    # Encode subset qs
-    encodedTestQ1s = encodeQs(
-        testQs1[startIdx:startIdx + subsetLength], inputLength, alphabet)
-    encodedTestQ2s = encodeQs(
-        testQs2[startIdx:startIdx + subsetLength], inputLength, alphabet)
-    # Make predictions
-    preds = model.predict([encodedTestQ1s, encodedTestQ2s])
-    yTest[startIdx:startIdx + subsetLength,
-          0] = np.array(list(range(startIdx, startIdx + subsetLength)))
-    yTest[startIdx:startIdx + subsetLength,
-          1] = np.reshape((preds > 0.5).astype(int), (len(preds),))
-    # if subset % 1000 == 0:
-    #     np.savetxt("preds_0to{0}.csv".format(startIdx + subsetLength - 1), yTest,
-    # fmt='%i', delimiter=',', header="test_id,is_duplicate", comments='')
+encodedTestQ1s = encodeQs(testQs1, inputLength, alphabet)
+encodedTestQ2s = encodeQs(testQs2, inputLength, alphabet)
+preds = model.predict([encodedTestQ1s, encodedTestQ2s], verbose=1)
 
-startIdx = nOfSubsets * subsetLength
-endIdx = len(testQs1)
-encodedTestQ1s = encodeQs(testQs1[startIdx:endIdx], inputLength, alphabet)
-encodedTestQ2s = encodeQs(testQs2[startIdx:endIdx], inputLength, alphabet)
-preds = model.predict([encodedTestQ1s, encodedTestQ2s])
-yTest[startIdx:endIdx, 0] = np.array(list(range(startIdx, endIdx)))
-yTest[startIdx:endIdx, 1] = np.reshape(
-    (preds > 0.5).astype(int), (len(preds),))
+# # Encode testdata and make predictions
+# nOfQs = len(testQs1)
+# subsetLength = 100
+# nOfSubsets = int(nOfQs / subsetLength)
+# for subset in range(nOfSubsets):
+#     #     if subset < 21001:
+#     #         continue
+#     #     print(time.strftime("%c"))
+#     print("Subset " + str(subset + 1) + " of " + str(nOfSubsets) +
+#           " = {0:.2f}".format(float(subset + 1) / nOfSubsets), end='\r')
+#     startIdx = subset * subsetLength
+#     # print("  from " + str(startIdx) + " to " +
+#     #       str(startIdx + subsetLength - 1))
+#     # Encode subset qs
+#     encodedTestQ1s = encodeQs(
+#         testQs1[startIdx:startIdx + subsetLength], inputLength, alphabet)
+#     encodedTestQ2s = encodeQs(
+#         testQs2[startIdx:startIdx + subsetLength], inputLength, alphabet)
+#     # Make predictions
+#     preds = model.predict([encodedTestQ1s, encodedTestQ2s])
+#     yTest[startIdx:startIdx + subsetLength,
+#           0] = np.array(list(range(startIdx, startIdx + subsetLength)))
+#     yTest[startIdx:startIdx + subsetLength,
+#           1] = np.reshape((preds > 0.5).astype(int), (len(preds),))
+#     # if subset % 1000 == 0:
+#     #     np.savetxt("preds_0to{0}.csv".format(startIdx + subsetLength - 1), yTest,
+#     # fmt='%i', delimiter=',', header="test_id,is_duplicate", comments='')
+
+# startIdx = nOfSubsets * subsetLength
+# endIdx = len(testQs1)
+# encodedTestQ1s = encodeQs(testQs1[startIdx:endIdx], inputLength, alphabet)
+# encodedTestQ2s = encodeQs(testQs2[startIdx:endIdx], inputLength, alphabet)
+# preds = model.predict([encodedTestQ1s, encodedTestQ2s])
+# yTest[startIdx:endIdx, 0] = np.array(list(range(startIdx, endIdx)))
+# yTest[startIdx:endIdx, 1] = np.reshape(
+#     (preds > 0.5).astype(int), (len(preds),))
 
 # Save predictions in the format dictated by Kaggle
-np.savetxt("preds_0to{0}.csv".format(endIdx), yTest, fmt='%i',
+np.savetxt("PREDS_SigmoidSmaller_epoch??.csv".format(endIdx), yTest, fmt='%i',
            delimiter=',', header="test_id,is_duplicate", comments='')
 
 print("Saved predictions.")

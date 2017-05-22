@@ -5,6 +5,8 @@ from collections import Counter
 import os
 from sys import getsizeof
 import time
+import math
+print("imported pre-reqs")
 # import cv2
 
 # To clear print buffer
@@ -18,9 +20,8 @@ import time
 from keras import backend as K
 from keras.models import Model, Sequential
 from keras.layers import Input, Conv1D, MaxPooling1D
-from keras.layers import Flatten, Dense, Dropout
+from keras.layers import Flatten, Dense, Dropout, Lambda
 from keras.layers.merge import Concatenate
-from keras.layers.embeddings import Embedding
 from keras.optimizers import SGD
 from keras.initializers import RandomNormal
 
@@ -36,18 +37,18 @@ print(testDf.isnull().sum())
 
 # Add the string 'empty' to empty strings
 trainDf = trainDf.fillna('empty')
-testDf = testDf.fillna('empty')
+# testDf = testDf.fillna('empty')
 
 # Convert into np array
 trainData = np.array(trainDf)
-testData = np.array(testDf)
+# testData = np.array(testDf)
 
 # Inputs
 # Get list of questions in Question1 and Question2
 trainQs1 = trainData[:, 3]
 trainQs2 = trainData[:, 4]
-testQs1 = testData[:, 1]
-testQs2 = testData[:, 2]
+# testQs1 = testData[:, 1]
+# testQs2 = testData[:, 2]
 
 # Outputs (whether duplicate or not)
 outputs = trainData[:, 5]
@@ -59,45 +60,13 @@ alphabetSize = 70
 inputDim = alphabetSize  # number of letters (characters) in alphabet
 inputLength = 1014  # input feature length (the paper used 1014)
 
-# # Get list of question IDs and questions in training data
-# qsDict = {}
-# for data in trainData:
-#     qsDict[data[1]] = data[3].lower()
-#     qsDict[data[2]] = data[4].lower()
-#
-# # Save qsDict
-# np.save("qsDict", qsDict)
-#
-# # Extract question IDs and questions
-# qIds = list(qsDict.keys())
-# questions = list(qsDict.values())
-#
-# # Append all characters from training data questions into list
-# charFullCorpus = []
-# for (q, question) in enumerate(questions):
-#     # Printing status (makes it slow)
-#     # clear_output(); print(str(q)+" of "+str(len(questions)))
-#     for char in list(question):
-#         charFullCorpus.append(char)
-#
-# # EXTRACT CHARCTER CORPUS
-# charCorpusCountSorted, charCorpusSorted = \
-#     map(list, zip(*sorted(zip(Counter(charFullCorpus).values(),
-#                               Counter(charFullCorpus).keys()))))
-#
-# # Assign the most frequent #alphabetSize number of characters as the alphabet for the network
-# alphabet = charCorpusSorted[-alphabetSize-1:-1]
-#
-# # Save alphabet
-# np.save("alphabet", alphabet)
-
 # Load alphabet
 alphabet = np.load("alphabet.npy")
 alphabet = [str(a) for a in alphabet]
 print(alphabet)
 
 
-# To encode questions
+# To encode questions into char indices
 def encodeQs(questions, inputLength, alphabet):
     alphabetSize = len(alphabet)
     # Initialize encoded questions array
@@ -105,7 +74,7 @@ def encodeQs(questions, inputLength, alphabet):
     # For each question
     for (q, question) in enumerate(questions):
         print(str(q) + " of " + str(len(questions)) + " = " +
-              "{0:.2f}".format(float(q + 1) / len(questions)), end='\r')
+              "{0:.2f}".format(float(q) / len(questions)), end='\r')
         # For each character in question, in reversed order (so latest
         # character is first)
         for (c, char) in enumerate(reversed(question[:inputLength])):
@@ -114,6 +83,7 @@ def encodeQs(questions, inputLength, alphabet):
                 encodedQs[q][c] = alphabet.index(char)
             else:
                 encodedQs[q][c] = 0
+    print("Done encoding.")
     return encodedQs
 
 # Make encoded questions out of training questions 1 and 2
@@ -133,83 +103,35 @@ print("encoded q1 and q2")
 # encodedQ2s = np.load("encodedQ2s_70_1014.npy")
 # print("Loaded encodedQs")
 
-
-def createBaseNetworkSmall(inputDim, inputLength):
-    baseNetwork = Sequential()
-    baseNetwork.add(Embedding(input_dim=inputDim,
-                              output_dim=inputDim, input_length=inputLength))
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(1024, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(1024, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    return baseNetwork
-
-
-def createBaseNetworkLarge(inputDim, inputLength):
-    baseNetwork = Sequential()
-    baseNetwork.add(Embedding(input_dim=inputDim,
-                              output_dim=inputDim, input_length=inputLength))
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(Conv1D(1024, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.02), bias_initializer=RandomNormal(mean=0.0, stddev=0.02)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(2048, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(2048, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    return baseNetwork
-
-
-def createSplitBaseNetworkSmall(inputDim, inputLength):
-    baseNetwork = Sequential()
-    baseNetwork.add(Embedding(input_dim=inputDim,
-                              output_dim=inputDim, input_length=inputLength))
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    return baseNetwork
-
-baseNetwork = createSplitBaseNetworkSmall(inputDim, inputLength)
+# MODEL
 
 # Inputs
 inputA = Input(shape=(inputLength,))
 inputB = Input(shape=(inputLength,))
 
+# One hot encoding
+oheInputA = Lambda(K.one_hot, arguments={
+                   'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputA)
+oheInputB = Lambda(K.one_hot, arguments={
+                   'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputB)
+
+
+def createSplitBaseNetworkSmall(inputLength, inputDim):
+    baseNetwork = Sequential()
+    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', input_shape=(inputLength, inputDim), 
+        kernel_initializer=RandomNormal(mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    return baseNetwork
+
+baseNetwork = createSplitBaseNetworkSmall(inputLength, inputDim)
+
 # because we re-use the same instance `base_network`,
 # the weights of the network will be shared across the two branches
-processedA = baseNetwork(inputA)
-processedB = baseNetwork(inputB)
+processedA = baseNetwork(oheInputA)
+processedB = baseNetwork(oheInputB)
 
 # Concatenate
 conc = Concatenate()([processedA, processedB])
@@ -252,7 +174,7 @@ model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
 minibatchSize = 100
 nEpochs = 40
 nOfQPairs = len(outputs)
-validationSplit = 0.0  # Use this much for validation
+validationSplit = 0.3  # Use this much for validation
 
 encodedTrainQ1s = encodedQ1s[:int((1 - validationSplit) * nOfQPairs)]
 encodedTrainQ2s = encodedQ2s[:int((1 - validationSplit) * nOfQPairs)]
@@ -301,7 +223,8 @@ for n in range(nEpochs):
     for m in range(nOfMinibatches):
         print(time.strftime("%c"))
         print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
-        print("  minibatch " + str(m + 1) + " of " + str(nOfMinibatches))
+        print("  minibatch " + str(m + 1) + " of " + str(nOfMinibatches) +
+              " = " + "{0:.2f}".format(float(m) / nOfMinibatches))
 
         # Compute the starting index of this mini-batch
         startIdx = m * minibatchSize
@@ -328,5 +251,4 @@ for n in range(nEpochs):
     print("LOSS = " + str(loss) + "; ACC = " + str(acc))
     print("saving current weights.")
     model.save_weights(
-        "charCNNSigmoidSplit-SG-BCE-initLR0.01-m0.9-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
-#
+        "charCNNSigmoidSplitVal-SG-BCE-initLR0.01-m0.9-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
