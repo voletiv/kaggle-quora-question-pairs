@@ -21,8 +21,7 @@ from keras.models import Model, Sequential
 from keras.layers import Input, Conv1D, MaxPooling1D
 from keras.layers import Flatten, Dense, Dropout, Lambda
 from keras.layers.merge import Concatenate
-from keras.optimizers import SGD
-from keras.initializers import RandomNormal
+from keras.layers.normalization import BatchNormalization
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 
 # Load training and test data
@@ -65,11 +64,9 @@ alphabetSize = len(alphabet)
 inputDim = alphabetSize  # number of letters (characters) in alphabet
 inputLength = 1014  # input feature length (the paper used 1014)
 
+
 # To encode questions into char indices
-
-
 def encodeQs(questions, inputLength, alphabet):
-    alphabetSize = len(alphabet)
     # Initialize encoded questions array
     encodedQs = np.zeros((len(questions), inputLength), dtype='int32')
     # For each question
@@ -202,7 +199,7 @@ def step_decay(epoch):
 lRate = LearningRateScheduler(step_decay)
 
 # Model Checkpoint
-filepath = "charCNNSigmoid-ohE-smAl-val0.2-epoch{epoch:02d}-l{loss:.4f}-a{acc:.4f}-vl{val_loss:.4f}-va{val_acc:.4f}.hdf5"
+filepath = "charCNNSigmoid-smAl--val0.2-epoch{epoch:02d}-l{loss:.4f}-a{acc:.4f}-vl{val_loss:.4f}-va{val_acc:.4f}.hdf5"
 checkpoint = ModelCheckpoint(
     filepath, verbose=1, save_best_only=False, save_weights_only=True)
 

@@ -18,10 +18,13 @@ import math
 # Keras
 from keras import backend as K
 from keras.models import Model, Sequential
-from keras.layers import Input, Lambda, LSTM, Dense, Dropout
+from keras.layers import Input, Conv1D, MaxPooling1D, Merge
+from keras.initializers import RandomNormal
+from keras.layers import Flatten, Dense, Dropout, Lambda
 from keras.layers.merge import Concatenate
 from keras.layers.normalization import BatchNormalization
-from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.optimizers import SGD
+from keras.callbacks import LearningRateScheduler, EarlyStopping, ModelCheckpoint
 
 # Load training and test data
 # Download train.csv and test.csv from
@@ -73,10 +76,12 @@ def cleanText(t):
     return t
 
 # Clean text
+print("Cleaning text...")
 trainDf['question1'] = cleanText(trainDf['question1'])
 trainDf['question2'] = cleanText(trainDf['question2'])
 # testDf['question1'] = cleanText(testDf['question1'])
 # testDf['question2'] = cleanText(testDf['question2'])
+print("Cleaned text.")
 
 # Convert into np array
 trainData = np.array(trainDf)
@@ -128,14 +133,16 @@ def encodeQs(questions, inputLength, alphabet):
     return encodedQs
 
 # Make encoded questions out of training questions 1 and 2
-print("encoding qs")
+print("encoding qs - 1 of 2:")
 encodedTrainQ1s = encodeQs(trainQs1, inputLength, alphabet)
-print("encoded q1, encoding q2")
+print("encoded q1, encoding q2:")
 encodedTrainQ2s = encodeQs(trainQs2, inputLength, alphabet)
 print("encoded q1 and q2")
 
+
 # MODEL
 
+# Inputs
 inputA = Input(shape=(inputLength,), dtype='int32')
 inputB = Input(shape=(inputLength,), dtype='int32')
 
@@ -145,50 +152,107 @@ oheInputA = Lambda(K.one_hot, arguments={
 oheInputB = Lambda(K.one_hot, arguments={
                    'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputB)
 
-# LSTM
-lstmLayer = LSTM(225, dropout=0.25, recurrent_dropout=0.25)
-xA = lstmLayer(oheInputA)
-xB = lstmLayer(oheInputB)
 
-# Concatenate
-conc = Concatenate()([xA, xB])
+def createBaseNetworkSmaller(inputLength, inputDim):
+    baseNetwork = Sequential()
+    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu',  input_shape=(inputLength, inputDim),
+                           kernel_initializer=RandomNormal(mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Flatten())
+    baseNetwork.add(Dense(64, activation='relu'))
+    baseNetwork.add(Dropout(0.5))
+    baseNetwork.add(Dense(64, activation='relu'))
+    return baseNetwork
 
-x = Dropout(0.25)(conc)
-x = BatchNormalization()(x)
+baseNetwork = createBaseNetworkSmaller(inputLength, inputDim)
 
-x = Dense(125, activation='relu')(x)
-x = Dropout(0.25)(x)
-x = BatchNormalization()(x)
+# because we re-use the same instance `base_network`,
+# the weights of the network will be shared across the two branches
+processedA = baseNetwork(oheInputA)
+processedB = baseNetwork(oheInputB)
 
-predictions = Dense(1, activation='sigmoid')(x)
 
-model = Model([inputA, inputB], predictions)
+def euclidean_distance(vects):
+    x, y = vects
+    return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
+
+
+def eucl_dist_output_shape(shapes):
+    shape1, shape2 = shapes
+    return (shape1[0], 1)
+
+distance = Lambda(euclidean_distance,
+                  output_shape=eucl_dist_output_shape)([processedA, processedB])
+
+
+# # Concatenate
+# conc = Concatenate()([processedA, processedB])
+# x = BatchNormalization()(conc)
+
+# # Dense
+# x = Dense(64, activation='relu')(x)
+# x = Dropout(0.5)(x)
+# x = BatchNormalization()(x)
+
+# predictions = Dense(1, activation='sigmoid')(x)
+
+model = Model([inputA, inputB], distance)
+
+print(model.summary())
 
 # Compile
-model.compile(loss='binary_crossentropy',
-              optimizer='nadam', metrics=['accuracy'])
+# initLR = 0.001
+# momentum = 0.9
+# sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
+# model.compile(loss='binary_crossentropy',
+#               optimizer='nadam', metrics=['accuracy'])
 
-# Make Val Data
+
+def contrastive_loss(y_true, y_pred):
+    '''Contrastive loss from Hadsell-et-al.'06
+    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    '''
+    margin = 1
+    return K.mean(y_true * K.square(y_pred) +
+                  (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+
+model.compile(loss=contrastive_loss, optimizer='nadam', metrics=['accuracy'])
+
+# MAKE VAL DATA
 validationSplit = 0.2  # Use this much for validation
 
-# Early Stopping
-earlyStopping = EarlyStopping(monitor='val_loss', patience=3)
+
+# Learning Rate Schedule
+# Halve lr every 3 epochs
+# def step_decay(epoch):
+#     initial_lrate = initLR
+#     drop = 0.5
+#     epochs_drop = 2.0
+#     lrate = initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop))
+#     print("lr dropped to " + str(lrate))
+#     return lrate
+
+# lRate = LearningRateScheduler(step_decay)
 
 # Model Checkpoint
-filepath = "LSTM-smAl-val0.2-epoch{epoch:02d}-l{loss:.4f}-a{acc:.4f}-vl{val_loss:.4f}-va{val_acc:.4f}.hdf5"
+filepath = "charCNN-smAl-C256P3C256P3f64-eucDist-val0.2-epoch{epoch:02d}-l{loss:.4f}-a{acc:.4f}-vl{val_loss:.4f}-va{val_acc:.4f}.hdf5"
 checkpoint = ModelCheckpoint(
     filepath, verbose=1, save_best_only=False, save_weights_only=True)
 
 # Callbacks
-callbacks_list = [earlyStopping, checkpoint]
+callbacks_list = [checkpoint]
 
 # Hyperparameters
-minibatchSize = 64
-nEpochs = 500
+minibatchSize = 100
+nEpochs = 40
 
 # # SKIP: Load weights
 # model.load_weights(
-#     "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch13.hdf5")
+#     "charCNNSmaller-ohE-smAl-val0.2-epoch15-l0.3907-a0.8311-vl0.4616-va0.7891.hdf5")
 
 # Train
 history = model.fit([encodedTrainQ1s, encodedTrainQ2s], trainOutputs,

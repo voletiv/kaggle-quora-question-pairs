@@ -99,7 +99,6 @@ print(alphabet)
 
 # To encode questions into char indices
 def encodeQs(questions, inputLength, alphabet):
-    alphabetSize = len(alphabet)
     # Initialize encoded questions array
     encodedQs = np.zeros((len(questions), inputLength), dtype='int32')
     # For each question
@@ -217,95 +216,125 @@ momentum = 0.9
 sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
 model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
-# # Checkpoint
-# filepath = "weights-{epoch:02d}-{val_acc:.2f}.hdf5"
-# checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1,
-#                              save_best_only=True, mode='min')
+# # MAKE MINIBATCHES
 
-# # callbacks
-# callbacks = [lRate, checkpoint]
+# minibatchSize = 100
+# nEpochs = 40
+# nOfQPairs = len(outputs)
+# validationSplit = 0.2  # Use this much for validation
 
-# MAKE MINIBATCHES
+# encodedTrainQ1s = encodedQ1s[:int((1 - validationSplit) * nOfQPairs)]
+# encodedTrainQ2s = encodedQ2s[:int((1 - validationSplit) * nOfQPairs)]
+# encodedValQ1s = encodedQ1s[int((1 - validationSplit) * nOfQPairs):]
+# encodedValQ2s = encodedQ2s[int((1 - validationSplit) * nOfQPairs):]
+# trainOutputs = outputs[:int((1 - validationSplit) * nOfQPairs)]
+# valOutputs = outputs[int((1 - validationSplit) * nOfQPairs):]
 
-minibatchSize = 100
-nEpochs = 40
-nOfQPairs = len(outputs)
+# # Count number of mini-batches
+# nOfMinibatches = int(len(trainOutputs) / minibatchSize)
+# print("Size of full trainingData: " + str(len(outputs)))
+# print("Validation split: " + str(validationSplit))
+# print("Size of trainingData: " + str(len(trainOutputs)))
+# print("Size of valData: " + str(len(valOutputs)))
+# print("nOfMinibatches: " + str(nOfMinibatches))
+
+# # Make a list of all the indices
+# fullIdx = list(range(len(trainOutputs)))
+
+# # # SKIP: Load weights
+# # model.load_weights(
+# #     "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch13.hdf5")
+
+# lr = initLR
+# for n in range(nEpochs):
+#     print(time.strftime("%c"))
+#     print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
+
+#     # Halve LR every 3rd epoch
+#     if n != 0 and n % 3 == 0:
+#         lr /= 2
+#         print("lr reduced to " + str(lr))
+#         sgd = SGD(lr=lr, momentum=momentum, nesterov=False)
+#         model.compile(loss='binary_crossentropy',
+#                       optimizer=sgd, metrics=['accuracy'])
+
+#     # # SKIP:
+#     # if n < 14:
+#     #     continue
+
+#     # Shuffle the full index
+#     np.random.shuffle(fullIdx)
+#     # print(fullIdx)
+
+#     # For each mini-batch
+#     for m in range(nOfMinibatches):
+#         print(time.strftime("%c"))
+#         print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
+#         print("  minibatch " + str(m + 1) + " of " + str(nOfMinibatches) +
+#               " = " + "{0:.2f}".format(float(m) / nOfMinibatches))
+
+#         # Compute the starting index of this mini-batch
+#         startIdx = m * minibatchSize
+
+#         # Declare sampled inputs and outputs
+#         encodedQ1sSample = encodedTrainQ1s[
+#             fullIdx[startIdx:startIdx + minibatchSize]]
+#         encodedQ2sSample = encodedTrainQ2s[
+#             fullIdx[startIdx:startIdx + minibatchSize]]
+#         outputsSample = trainOutputs[
+#             fullIdx[startIdx:startIdx + minibatchSize]]
+
+#         model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample,
+#                   batch_size=minibatchSize, epochs=1, verbose=1)
+
+#     # Evaluate current model
+#     print("evaluating current model:")
+#     if len(valOutputs) > 0:
+#         loss, acc = model.evaluate([encodedValQ1s, encodedValQ2s], valOutputs)
+#     else:
+#         loss, acc = model.evaluate(
+#             [encodedTrainQ1s, encodedTrainQ2s], trainOutputs)
+#     print(time.strftime("%c"))
+#     print("LOSS = " + str(loss) + "; ACC = " + str(acc))
+#     print("saving current weights.")
+#     model.save_weights(
+#         "charCNNSigmoid-ohE-val0.2-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
+
+
+# MAKE VAL DATA
 validationSplit = 0.2  # Use this much for validation
 
-encodedTrainQ1s = encodedQ1s[:int((1 - validationSplit) * nOfQPairs)]
-encodedTrainQ2s = encodedQ2s[:int((1 - validationSplit) * nOfQPairs)]
-encodedValQ1s = encodedQ1s[int((1 - validationSplit) * nOfQPairs):]
-encodedValQ2s = encodedQ2s[int((1 - validationSplit) * nOfQPairs):]
-trainOutputs = outputs[:int((1 - validationSplit) * nOfQPairs)]
-valOutputs = outputs[int((1 - validationSplit) * nOfQPairs):]
 
-# Count number of mini-batches
-nOfMinibatches = int(len(trainOutputs) / minibatchSize)
-print("Size of full trainingData: " + str(len(outputs)))
-print("Validation split: " + str(validationSplit))
-print("Size of trainingData: " + str(len(trainOutputs)))
-print("Size of valData: " + str(len(valOutputs)))
-print("nOfMinibatches: " + str(nOfMinibatches))
+# Learning Rate Schedule
+# Halve lr every 3 epochs
+def step_decay(epoch):
+    initial_lrate = initLR
+    drop = 0.5
+    epochs_drop = 3.0
+    lrate = initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop))
+    print("lr dropped to " + str(lrate))
+    return lrate
 
-# Make a list of all the indices
-fullIdx = list(range(len(trainOutputs)))
+lRate = LearningRateScheduler(step_decay)
+
+# Model Checkpoint
+filepath = "charCNNSigmoid-ohE-smAl-val0.2-epoch{epoch:02d}-l{loss:.4f}-a{acc:.4f}-vl{val_loss:.4f}-va{val_acc:.4f}.hdf5"
+checkpoint = ModelCheckpoint(
+    filepath, verbose=1, save_best_only=False, save_weights_only=True)
+
+# Callbacks
+callbacks_list = [lRate, checkpoint]
+
+# Hyperparameters
+minibatchSize = 100
+nEpochs = 40
 
 # # SKIP: Load weights
 # model.load_weights(
 #     "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch13.hdf5")
 
-lr = initLR
-for n in range(nEpochs):
-    print(time.strftime("%c"))
-    print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
-
-    # Halve LR every 3rd epoch
-    if n != 0 and n % 3 == 0:
-        lr /= 2
-        print("lr reduced to " + str(lr))
-        sgd = SGD(lr=lr, momentum=momentum, nesterov=False)
-        model.compile(loss='binary_crossentropy',
-                      optimizer=sgd, metrics=['accuracy'])
-
-    # # SKIP:
-    # if n < 14:
-    #     continue
-
-    # Shuffle the full index
-    np.random.shuffle(fullIdx)
-    # print(fullIdx)
-
-    # For each mini-batch
-    for m in range(nOfMinibatches):
-        print(time.strftime("%c"))
-        print("EPOCH " + str(n + 1) + " of " + str(nEpochs))
-        print("  minibatch " + str(m + 1) + " of " + str(nOfMinibatches) +
-              " = " + "{0:.2f}".format(float(m) / nOfMinibatches))
-
-        # Compute the starting index of this mini-batch
-        startIdx = m * minibatchSize
-
-        # Declare sampled inputs and outputs
-        encodedQ1sSample = encodedTrainQ1s[
-            fullIdx[startIdx:startIdx + minibatchSize]]
-        encodedQ2sSample = encodedTrainQ2s[
-            fullIdx[startIdx:startIdx + minibatchSize]]
-        outputsSample = trainOutputs[
-            fullIdx[startIdx:startIdx + minibatchSize]]
-
-        model.fit([encodedQ1sSample, encodedQ2sSample], outputsSample,
-                  batch_size=minibatchSize, epochs=1, verbose=1)
-
-    # Evaluate current model
-    print("evaluating current model:")
-    if len(valOutputs) > 0:
-        loss, acc = model.evaluate([encodedValQ1s, encodedValQ2s], valOutputs)
-    else:
-        loss, acc = model.evaluate(
-            [encodedTrainQ1s, encodedTrainQ2s], trainOutputs)
-    print(time.strftime("%c"))
-    print("LOSS = " + str(loss) + "; ACC = " + str(acc))
-    print("saving current weights.")
-    model.save_weights(
-        "charCNNSigmoid-ohE-val0.2-epoch{0:02d}-loss{1:.4f}-acc{2:.4f}.hdf5".format(n, loss, acc))
-#
+# Train
+history = model.fit([encodedTrainQ1s, encodedTrainQ2s], trainOutputs,
+                    batch_size=minibatchSize, epochs=nEpochs, verbose=1,
+                    callbacks=callbacks_list, validation_split=validationSplit,
+                    initial_epoch=0)

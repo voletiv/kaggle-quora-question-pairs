@@ -196,7 +196,7 @@ fullIdx = list(range(len(trainOutputs)))
 
 # # SKIP: Load weights
 # model.load_weights(
-#     "charCNNSigmoid-SG-BCE-initLR0.01-m0.9-epoch13.hdf5")
+#     "charCNN-smAl-C256P3C256P3f128-conc-val0.2-epoch01-l0.5079-a0.7548-vl0.5117-va0.7551.hdf5")
 
 lr = initLR
 for n in range(nEpochs):
