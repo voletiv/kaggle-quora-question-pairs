@@ -18,10 +18,27 @@ import math
 # Keras
 from keras import backend as K
 from keras.models import Model, Sequential
-from keras.layers import Input, Lambda, LSTM, Dense, Dropout
+from keras.layers import Input, Lambda, GRU, Dense, Dropout
 from keras.layers.merge import Concatenate
 from keras.layers.normalization import BatchNormalization
 from keras.callbacks import EarlyStopping, ModelCheckpoint
+
+# # Alphabet
+# # Space is the first char because its index has to be 0
+# alphabet = [' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+#             'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6',
+#             '7', '8', '9', '!', '?', ':', '$', '%', '^', '*', '+', '-', '=']
+
+# Load alphabet
+alphabet = np.load("smallerAlphabet.npy")
+alphabet = [str(a) for a in alphabet]
+print(alphabet)
+
+# Params
+inputDim = len(alphabet)  # number of letters (characters) in alphabet
+inputLength = 1014  # input feature length (the paper used 1014)
+
+# DATA
 
 # Load training and test data
 # Download train.csv and test.csv from
@@ -73,12 +90,10 @@ def cleanText(t):
     return t
 
 # Clean text
-print("Cleaning text...")
 trainDf['question1'] = cleanText(trainDf['question1'])
 trainDf['question2'] = cleanText(trainDf['question2'])
 # testDf['question1'] = cleanText(testDf['question1'])
 # testDf['question2'] = cleanText(testDf['question2'])
-print("Cleaned text.")
 
 # Convert into np array
 trainData = np.array(trainDf)
@@ -94,20 +109,7 @@ trainQs2 = trainData[:, 4]
 # Outputs (whether duplicate or not)
 trainOutputs = trainData[:, 5]
 
-# # Alphabet
-# # Space is the first char because its index has to be 0
-# alphabet = [' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-#             'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6',
-#             '7', '8', '9', '!', '?', ':', '$', '%', '^', '*', '+', '-', '=']
-
-# Load alphabet
-alphabet = np.load("smallerAlphabet.npy")
-alphabet = [str(a) for a in alphabet]
-print(alphabet)
-
-# Params
-inputDim = len(alphabet)  # number of letters (characters) in alphabet
-inputLength = 1014  # input feature length (the paper used 1014)
+# ENCODE DATA
 
 
 # To encode questions into char indices
@@ -136,6 +138,8 @@ print("encoded q1, encoding q2")
 encodedTrainQ2s = encodeQs(trainQs2, inputLength, alphabet)
 print("encoded q1 and q2")
 
+# TRAIN
+
 # MODEL
 
 inputA = Input(shape=(inputLength,), dtype='int32')
@@ -148,9 +152,9 @@ oheInputB = Lambda(K.one_hot, arguments={
                    'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputB)
 
 # LSTM
-lstmLayer = LSTM(175, dropout=0.25, recurrent_dropout=0.25)
-xA = lstmLayer(oheInputA)
-xB = lstmLayer(oheInputB)
+gruLayer = GRU(200, dropout=0.25, recurrent_dropout=0.25)
+xA = gruLayer(oheInputA)
+xB = gruLayer(oheInputB)
 
 # Concatenate
 conc = Concatenate()([xA, xB])
@@ -167,27 +171,25 @@ predictions = Dense(1, activation='sigmoid')(x)
 model = Model([inputA, inputB], predictions)
 
 # Compile
-print("Compiling model...")
 model.compile(loss='binary_crossentropy',
               optimizer='nadam', metrics=['accuracy'])
-print("Model compiled.")
 
 # Make Val Data
 validationSplit = 0.2  # Use this much for validation
 
 # Early Stopping
-earlyStopping = EarlyStopping(monitor='val_loss', patience=3)
+earlyStopping = EarlyStopping(monitor='loss', patience=3)
 
 # Model Checkpoint
-filepath = "LSTM-smAl-lstm175-dense100-do0.25-val0.2-epoch{epoch:02d}-l{loss:.4f}-a{acc:.4f}-vl{val_loss:.4f}-va{val_acc:.4f}.hdf5"
+filepath = "GRU300-smAl-val0.2-epoch{epoch:02d}-l{loss:.4f}-a{acc:.4f}-vl{val_loss:.4f}-va{val_acc:.4f}.hdf5"
 checkpoint = ModelCheckpoint(
     filepath, verbose=1, save_best_only=False, save_weights_only=True)
 
 # Callbacks
-callbacks_list = [earlyStopping, checkpoint]
+callbacks_list = [checkpoint]
 
 # Hyperparameters
-minibatchSize = 32
+minibatchSize = 80
 nEpochs = 500
 
 # # SKIP: Load weights

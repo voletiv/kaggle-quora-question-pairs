@@ -1,9 +1,12 @@
+# https://www.kaggle.com/lystdo/lstm-with-word2vec-embeddings
 # Pre-requisites
 import numpy as np
 import pandas as pd
 from collections import Counter
-import re
 import os
+import re
+import csv
+import codecs
 from sys import getsizeof
 import time
 import math
@@ -16,8 +19,12 @@ import math
 # import tensorflow as tf
 #     with tf.device('/gpu:0'):
 
+from gensim.models import KeyedVectors
+
 # Keras
 from keras import backend as K
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
 from keras.models import Model, Sequential
 from keras.layers import Input, Conv1D, MaxPooling1D, Merge
 from keras.initializers import RandomNormal
@@ -27,11 +34,18 @@ from keras.layers.normalization import BatchNormalization
 from keras.optimizers import SGD, RMSprop
 from keras.callbacks import LearningRateScheduler, EarlyStopping, ModelCheckpoint
 
+# Max number of words
+MAX_NB_WORDS = 200000
+
+EMBEDDING_FILE = '/home/voletiv/Downloads/GoogleNews-vectors-negative300.bin'
+
 # Load training and test data
 # Download train.csv and test.csv from
 # https://www.kaggle.com/c/quora-question-pairs/
-trainDf = pd.read_csv('kaggleQuoraTrain.csv', sep=',')
-# testDf = pd.read_csv('kaggleQuoraTest.csv', sep=',')
+TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
+TEST_DATA_FILE = 'kaggleQuoraTest.csv'
+trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
+testDf = pd.read_csv(TEST_DATA_FILE, sep=',')
 
 # Check for any null values
 print(trainDf.isnull().sum())
@@ -39,8 +53,7 @@ print(trainDf.isnull().sum())
 
 # Add the string 'empty' to empty strings
 trainDf = trainDf.fillna('empty')
-# testDf = testDf.fillna('empty')
-
+testDf = testDf.fillna('empty')
 
 def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
     # Clean the text, with the option to remove stopwords and to stem words.
@@ -95,38 +108,58 @@ print("Cleaning text...")
 nOfTrainQs = len(trainDf['question1'])
 trainQs1 = []
 for i, q in enumerate(trainDf['question1']):
-    print("Cleaning Train Q1s: {0:.2f}".format(
-        float(i) / nOfTrainQs), end='\r')
+    print("Cleaning Train Q1s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
     trainQs1.append(text_to_wordlist(q))
 
 trainQs2 = []
 for i, q in enumerate(trainDf['question2']):
-    print("Cleaning Train Q2s: {0:.2f}".format(
-        float(i) / nOfTrainQs), end='\r')
+    print("Cleaning Train Q2s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
     trainQs2.append(text_to_wordlist(q))
 
-# testQs1 = []
-# for i, q in enumerate(testDf['question2']):
-#     print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
-#     testQs2.append(text_to_wordlist(q))
+testQs1 = []
+for i, q in enumerate(testDf['question2']):
+    print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
+    testQs2.append(text_to_wordlist(q))
 
-# testQs2 = []
-# for i, q in enumerate(testDf['question2']):
-#     print("Cleaning Test Q2s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
-#     testQs2.append(text_to_wordlist(q))
+testQs2 = []
+for i, q in enumerate(testDf['question2']):
+    print("Cleaning Test Q2s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
+    testQs2.append(text_to_wordlist(q))
+
+
+print("Cleaned text.")
+
+# Indexing word vectors
+word2vec = KeyedVectors.load_word2vec_format(EMBEDDING_FILE,
+                                             binary=True)
+
+# Tokenizer - index words by numbers
+tokenizer = Tokenizer(num_words=MAX_NB_WORDS)
+tokenizer.fit_on_texts(texts_1 + texts_2 + test_texts_1 + test_texts_2)
+
+
+# Convert into np array
+trainData = np.array(trainDf)
+# testData = np.array(testDf)
+
+# Inputs
+# Get list of questions in Question1 and Question2
+trainQs1 = trainData[:, 3]
+trainQs2 = trainData[:, 4]
+# testQs1 = testData[:, 1]
+# testQs2 = testData[:, 2]
 
 # Outputs (whether duplicate or not)
-trainData = np.array(trainDf)
 trainOutputs = trainData[:, 5]
 
 # # Alphabet
 # # Space is the first char because its index has to be 0
 # alphabet = [' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
 #             'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6',
-#             '7', '8', '9', '^', '!', '+', '-', '=']
+#             '7', '8', '9', '!', '?', ':', '$', '%', '^', '*', '+', '-', '=']
 
 # Load alphabet
-alphabet = np.load("mathAlphabet.npy")
+alphabet = np.load("smallerAlphabet.npy")
 alphabet = [str(a) for a in alphabet]
 print(alphabet)
 
@@ -238,7 +271,7 @@ model.compile(loss=contrastive_loss, optimizer=rms)
 validationSplit = 0.2  # Use this much for validation
 
 # Model Checkpoint
-filepath = "charCNN-maAl-C256P3C256P3f64BnDo0.5f64-eucDist-val0.2-epoch{epoch:02d}-l{loss:.4f}-vl{val_loss:.4f}.hdf5"
+filepath = "charCNN-smAl-C256P3C256P3f64BnDo0.5f64-eucDist-val0.2-epoch{epoch:02d}-l{loss:.4f}-vl{val_loss:.4f}.hdf5"
 checkpoint = ModelCheckpoint(
     filepath, verbose=1, save_best_only=False, save_weights_only=True)
 
