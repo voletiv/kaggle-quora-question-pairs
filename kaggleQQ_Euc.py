@@ -13,8 +13,8 @@ import math
 # from IPython.display import clear_output
 
 # tensorflow
-# import tensorflow as tf
-#     with tf.device('/gpu:0'):
+import tensorflow as tf
+# with tf.device('/gpu:0'):
 
 # Keras
 from keras import backend as K
@@ -27,11 +27,37 @@ from keras.layers.normalization import BatchNormalization
 from keras.optimizers import SGD, RMSprop
 from keras.callbacks import LearningRateScheduler, EarlyStopping, ModelCheckpoint
 
-# Load training and test data
+# PARAMETERS
+MAX_NB_WORDS = 200000
+inputLength = 1014  # input feature length (the paper used 1014)
+validationSplit = 0.2
+minibatchSize = 100
+nEpochs = 100
+
+# # Alphabet
+# # Space is the first char because its index has to be 0
+# alphabet = [' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+#             'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6',
+#             '7', '8', '9', '!', '^', '+', '-', '=']
+
+# Load alphabet
+alphabet = np.load("mathAlphabet.npy")
+alphabet = [str(a) for a in alphabet]
+print(alphabet)
+
+# Params
+inputDim = len(alphabet)  # number of letters (characters) in alphabet
+
+EMBEDDING_FILE = '/home/voletiv/Downloads/GoogleNews-vectors-negative300.bin'
+
+# LOAD TRAINING AND TESTING DATA
+
 # Download train.csv and test.csv from
 # https://www.kaggle.com/c/quora-question-pairs/
-trainDf = pd.read_csv('kaggleQuoraTrain.csv', sep=',')
-# testDf = pd.read_csv('kaggleQuoraTest.csv', sep=',')
+TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
+TEST_DATA_FILE = 'kaggleQuoraTest.csv'
+trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
+# testDf = pd.read_csv(TEST_DATA_FILE, sep=',')
 
 # Check for any null values
 print(trainDf.isnull().sum())
@@ -41,7 +67,12 @@ print(trainDf.isnull().sum())
 trainDf = trainDf.fillna('empty')
 # testDf = testDf.fillna('empty')
 
+# Load idx of train and val
+trainIdx = np.load("trainIdx.npy")
+valIdx = np.load("valIdx.npy")
 
+
+# To clean data
 def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
     # Clean the text, with the option to remove stopwords and to stem words.
     # Convert words to lower case and split them
@@ -93,46 +124,41 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
 # Clean text
 print("Cleaning text...")
 nOfTrainQs = len(trainDf['question1'])
-trainQs1 = []
+trainFullQ1s = []
 for i, q in enumerate(trainDf['question1']):
     print("Cleaning Train Q1s: {0:.2f}".format(
         float(i) / nOfTrainQs), end='\r')
-    trainQs1.append(text_to_wordlist(q))
+    trainFullQ1s.append(text_to_wordlist(q))
 
-trainQs2 = []
+trainFullQ2s = []
 for i, q in enumerate(trainDf['question2']):
     print("Cleaning Train Q2s: {0:.2f}".format(
         float(i) / nOfTrainQs), end='\r')
-    trainQs2.append(text_to_wordlist(q))
+    trainFullQ2s.append(text_to_wordlist(q))
 
-# testQs1 = []
+# nOfTestQs = len(testDf['question1'])
+# testQ1s = []
 # for i, q in enumerate(testDf['question2']):
-#     print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
-#     testQs2.append(text_to_wordlist(q))
+#     print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
+#     testQ2s.append(text_to_wordlist(q))
 
-# testQs2 = []
+# testQ2s = []
 # for i, q in enumerate(testDf['question2']):
-#     print("Cleaning Test Q2s: {0:.2f}".format(float(i) / nOfTrainQs), end='\r')
-#     testQs2.append(text_to_wordlist(q))
+#     print("Cleaning Test Q2s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
+#     testQ2s.append(text_to_wordlist(q))
+
+print("Cleaned text.")
+
+# Make train and val data
+trainQ1s = [trainFullQ1s[i] for i in trainIdx]
+trainQ2s = [trainFullQ2s[i] for i in trainIdx]
+valQ1s = [trainFullQ1s[i] for i in valIdx]
+valQ2s = [trainFullQ2s[i] for i in valIdx]
 
 # Outputs (whether duplicate or not)
 trainData = np.array(trainDf)
-trainOutputs = trainData[:, 5]
-
-# # Alphabet
-# # Space is the first char because its index has to be 0
-# alphabet = [' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-#             'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6',
-#             '7', '8', '9', '^', '!', '+', '-', '=']
-
-# Load alphabet
-alphabet = np.load("mathAlphabet.npy")
-alphabet = [str(a) for a in alphabet]
-print(alphabet)
-
-# Params
-inputDim = len(alphabet)  # number of letters (characters) in alphabet
-inputLength = 1014  # input feature length (the paper used 1014)
+trainOutputs = trainData[trainIdx, 5]
+valOutputs = trainData[valIdx, 5]
 
 
 # To encode questions into char indices
@@ -155,12 +181,16 @@ def encodeQs(questions, inputLength, alphabet):
     return encodedQs
 
 # Make encoded questions out of training questions 1 and 2
-print("encoding qs - 1 of 2:")
-encodedTrainQ1s = encodeQs(trainQs1, inputLength, alphabet)
-print("encoded q1, encoding q2:")
-encodedTrainQ2s = encodeQs(trainQs2, inputLength, alphabet)
-print("encoded q1 and q2")
-
+print("encoding train qs - 1 of 2:")
+encodedTrainQ1s = encodeQs(trainQ1s, inputLength, alphabet)
+print("encoded train q1, encoding train q2:")
+encodedTrainQ2s = encodeQs(trainQ2s, inputLength, alphabet)
+print("encoded train q1 and q2")
+print("encoding val qs - 1 of 2:")
+encodedValQ1s = encodeQs(valQ1s, inputLength, alphabet)
+print("encoded val q1, encoding val q2:")
+encodedValQ2s = encodeQs(valQ2s, inputLength, alphabet)
+print("encoded val q1 and q2")
 
 # MODEL
 
@@ -183,12 +213,20 @@ def createBaseNetworkSmall(inputLength, inputDim):
     baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
         mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
     baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(BatchNormalization())
+    baseNetwork.add(Dense(1024, activation='relu'))
     baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(BatchNormalization())
+    baseNetwork.add(Dense(1024, activation='relu'))
+    baseNetwork.add(Dropout(0.5))
     return baseNetwork
 
 baseNetwork = createBaseNetworkSmall(inputLength, inputDim)
@@ -231,30 +269,37 @@ def contrastive_loss(y_true, y_pred):
     return K.mean(y_true * K.square(y_pred) +
                   (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
 
-rms = RMSprop()
-model.compile(loss=contrastive_loss, optimizer=rms)
 
-# MAKE VAL DATA
-validationSplit = 0.2  # Use this much for validation
+# Accuracy
+def eucAcc(y_true, y_pred):
+    thresh = 0.5
+    return K.mean(K.equal(y_true, tf.to_float(K.less(y_pred, thresh))), axis=-1)
+
+
+# Logloss
+def eucLL(y_true, y_pred):
+    myEps = 1e-15
+    probs = K.maximum(K.minimum(y_pred, 1 - myEps), myEps)
+    return K.mean(K.binary_crossentropy(probs, 1 - y_true), axis=-1)
+
+rms = RMSprop()
+model.compile(loss=contrastive_loss, optimizer=rms, metrics=[eucAcc, eucLL])
 
 # Model Checkpoint
-filepath = "charCNN-maAl-C256P3C256P3f64BnDo0.5f64-eucDist-val0.2-epoch{epoch:02d}-l{loss:.4f}-vl{val_loss:.4f}.hdf5"
+filepath = "charCNN-maAl-smallLeCun-eucDist-val0.2-epoch{epoch:02d}-tl{loss:.4f}-tacc{eucAcc:.4f}-tlogl{eucLL:.4f}-vl{val_loss:.4f}-vacc{val_eucAcc:.4f}-vlogl{val_eucLL:.4f}.hdf5"
 checkpoint = ModelCheckpoint(
     filepath, verbose=1, save_best_only=False, save_weights_only=True)
 
 # Callbacks
-callbacks_list = [checkpoint]
-
-# Hyperparameters
-minibatchSize = 100
-nEpochs = 100
+# callbacks_list = [checkpoint]
 
 # # SKIP: Load weights
 # model.load_weights(
 #     "charCNNSmaller-ohE-smAl-val0.2-epoch15-l0.3907-a0.8311-vl0.4616-va0.7891.hdf5")
 
 # Train
-history = model.fit([encodedTrainQ1s, encodedTrainQ2s], trainOutputs,
-                    batch_size=minibatchSize, epochs=nEpochs, verbose=1,
-                    callbacks=callbacks_list, validation_split=validationSplit,
-                    initial_epoch=0)
+model.fit([encodedTrainQ1s, encodedTrainQ2s], trainOutputs,
+          batch_size=minibatchSize, epochs=nEpochs, verbose=1,
+          callbacks=[checkpoint], validation_data=(
+    [encodedValQ1s, encodedValQ2s], valOutputs),
+    initial_epoch=0)

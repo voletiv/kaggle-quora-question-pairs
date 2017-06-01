@@ -1,118 +1,165 @@
 # Pre-requisites
 import numpy as np
-print("imported np")
 import pandas as pd
-print("imported pd")
 from collections import Counter
-print("imported counter")
+import re
 import os
-print("imported os")
 from sys import getsizeof
 import time
+import math
 # import cv2
 
+# To clear print buffer
+# from IPython.display import clear_output
+
 # tensorflow
-import tensorflow as tf
-print("imported tf")
-# with tf.device('/gpu:0'):
+# import tensorflow as tf
+#     with tf.device('/gpu:0'):
 
 # Keras
 from keras import backend as K
 from keras.models import Model, Sequential
-from keras.layers import Input, Conv1D, MaxPooling1D
+from keras.layers import Input, Conv1D, MaxPooling1D, Merge
 from keras.initializers import RandomNormal
 from keras.layers import Flatten, Dense, Dropout, Lambda
 from keras.layers.merge import Concatenate
 from keras.layers.normalization import BatchNormalization
-from keras.optimizers import SGD
+from keras.optimizers import SGD, RMSprop
 from keras.callbacks import LearningRateScheduler, EarlyStopping, ModelCheckpoint
-print("imported all keras")
+
+# PARAMETERS
+MAX_NB_WORDS = 200000
+inputLength = 1014  # input feature length (the paper used 1014)
+validationSplit = 0.2
+minibatchSize = 100
+nEpochs = 100
+
+# # Alphabet
+# # Space is the first char because its index has to be 0
+# alphabet = [' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+#             'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6',
+#             '7', '8', '9', '!', '^', '+', '-', '=']
 
 # Load alphabet
-alphabet = np.load("smallerAlphabet.npy")
+alphabet = np.load("mathAlphabet.npy")
 alphabet = [str(a) for a in alphabet]
 print(alphabet)
 
 # Params
 inputDim = len(alphabet)  # number of letters (characters) in alphabet
-inputLength = 1014  # input feature length (the paper used 1014)
 
-# Load training and test data
+EMBEDDING_FILE = '/home/voletiv/Downloads/GoogleNews-vectors-negative300.bin'
+
+# LOAD TRAINING AND TESTING DATA
+
 # Download train.csv and test.csv from
 # https://www.kaggle.com/c/quora-question-pairs/
-# trainDf = pd.read_csv('kaggleQuoraTrain.csv', sep=',')
-testDf = pd.read_csv('kaggleQuoraTest.csv', sep=',')
-print("read Dfs")
+TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
+TEST_DATA_FILE = 'kaggleQuoraTest.csv'
+trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
+testDf = pd.read_csv(TEST_DATA_FILE, sep=',')
 
 # Check for any null values
-# print(trainDf.isnull().sum())
-print(testDf.isnull().sum())
+print(trainDf.isnull().sum())
+# print(testDf.isnull().sum())
 
 # Add the string 'empty' to empty strings
-# trainDf = trainDf.fillna('empty')
+trainDf = trainDf.fillna('empty')
 testDf = testDf.fillna('empty')
 
+# Load idx of train and val
+trainIdx = np.load("trainIdx.npy")
+valIdx = np.load("valIdx.npy")
 
-# To clean text
-def cleanText(t):
-    # Make lower case
-    t = t.str.lower()
-    # Remove all characters that are not in the defined alphabet
-    # Full alphabet - r"[^a-z0-9?,'.\"-()/:+&’[\]%$^\\={}!“”_*#;|@ ]", ""
-    # Final alphabet : [a-z0-9!?:'$%^*+-= ]
-    t = t.str.replace(r"[^a-z0-9!?:'$%^&*+-= ]", "")
-    # Clean text
-    t = t.str.replace(r" & ", " and ")
-    t = t.str.replace(r" &", " and ")
-    t = t.str.replace(r"& ", " and ")
-    t = t.str.replace(r"&", " and ")
-    t = t.str.replace(r"what's", "what is")
-    t = t.str.replace(r"'s", "")
-    t = t.str.replace(r"'ve", " have")
-    t = t.str.replace(r"can't", "cannot")
-    t = t.str.replace(r"n't", " not")
-    t = t.str.replace(r"i'm", "i am")
-    t = t.str.replace(r"'re", " are")
-    t = t.str.replace(r"'d", " would")
-    t = t.str.replace(r"'ll", " will")
-    t = t.str.replace(r"'", "")
-    t = t.str.replace(r"(\d+)(k)", r"\g<1>000")
-    t = t.str.replace(r" e g ", " eg ")
-    t = t.str.replace(r" b g ", " bg ")
-    t = t.str.replace(r" u s ", " american ")
-    t = t.str.replace(r"0s", "0")
-    t = t.str.replace(r" 9 11 ", " 911 ")
-    t = t.str.replace(r"e - mail", "email")
-    t = t.str.replace(r"j k", "jk")
-    t = t.str.replace(r"\s{2,}", "")
-    return t
+
+# To clean data
+def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
+    # Clean the text, with the option to remove stopwords and to stem words.
+    # Convert words to lower case and split them
+    text = text.lower().split()
+    # Optionally, remove stop words
+    if remove_stopwords:
+        stops = set(stopwords.words("english"))
+        text = [w for w in text if not w in stops]
+    text = " ".join(text)
+    # Clean the text
+    text = re.sub(r"[^A-Za-z0-9^,!.\/'+-=]", " ", text)
+    text = re.sub(r"what's", "what is ", text)
+    text = re.sub(r"\'s", " ", text)
+    text = re.sub(r"\'ve", " have ", text)
+    text = re.sub(r"can't", "cannot ", text)
+    text = re.sub(r"n't", " not ", text)
+    text = re.sub(r"i'm", "i am ", text)
+    text = re.sub(r"\'re", " are ", text)
+    text = re.sub(r"\'d", " would ", text)
+    text = re.sub(r"\'ll", " will ", text)
+    text = re.sub(r",", " ", text)
+    text = re.sub(r"\.", " ", text)
+    text = re.sub(r"!", " ! ", text)
+    text = re.sub(r"\/", " ", text)
+    text = re.sub(r"\^", " ^ ", text)
+    text = re.sub(r"\+", " + ", text)
+    text = re.sub(r"\-", " - ", text)
+    text = re.sub(r"\=", " = ", text)
+    text = re.sub(r"'", " ", text)
+    text = re.sub(r"(\d+)(k)", r"\g<1>000", text)
+    text = re.sub(r":", " : ", text)
+    text = re.sub(r" e g ", " eg ", text)
+    text = re.sub(r" b g ", " bg ", text)
+    text = re.sub(r" u s ", " american ", text)
+    text = re.sub(r"\0s", "0", text)
+    text = re.sub(r" 9 11 ", "911", text)
+    text = re.sub(r"e - mail", "email", text)
+    text = re.sub(r"j k", "jk", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    # Optionally, shorten words to their stems
+    if stem_words:
+        text = text.split()
+        stemmer = SnowballStemmer('english')
+        stemmed_words = [stemmer.stem(word) for word in text]
+        text = " ".join(stemmed_words)
+    # Return a list of words
+    return(text)
 
 # Clean text
 print("Cleaning text...")
-# trainDf['question1'] = cleanText(trainDf['question1'])
-# trainDf['question2'] = cleanText(trainDf['question2'])
-testDf['question1'] = cleanText(testDf['question1'])
-testDf['question2'] = cleanText(testDf['question2'])
+nOfTrainQs = len(trainDf['question1'])
+nOfTestQs = len(testDf['question1'])
+trainFullQ1s = []
+for i, q in enumerate(trainDf['question1']):
+    print("Cleaning Train Q1s: {0:.2f}".format(
+        float(i) / nOfTrainQs), end='\r')
+    trainFullQ1s.append(text_to_wordlist(q))
+
+trainFullQ2s = []
+for i, q in enumerate(trainDf['question2']):
+    print("Cleaning Train Q2s: {0:.2f}".format(
+        float(i) / nOfTrainQs), end='\r')
+    trainFullQ2s.append(text_to_wordlist(q))
+
+testQ1s = []
+for i, q in enumerate(testDf['question2']):
+    print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
+    testQ2s.append(text_to_wordlist(q))
+
+testQ2s = []
+for i, q in enumerate(testDf['question2']):
+    print("Cleaning Test Q2s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
+    testQ2s.append(text_to_wordlist(q))
+
 print("Cleaned text.")
 
-# Convert into np array
-# trainData = np.array(trainDf)
-testData = np.array(testDf)
-
-# Inputs
-# Get list of questions in Question1 and Question2
-# trainQs1 = trainData[:, 3]
-# trainQs2 = trainData[:, 4]
-testQs1 = testData[:, 1]
-testQs2 = testData[:, 2]
+# Make train and val data
+trainQ1s = [trainFullQ1s[i] for i in trainIdx]
+trainQ2s = [trainFullQ2s[i] for i in trainIdx]
+valQ1s = [trainFullQ1s[i] for i in valIdx]
+valQ2s = [trainFullQ2s[i] for i in valIdx]
 
 # Outputs (whether duplicate or not)
-# trainOutputs = trainData[:, 5]
+trainData = np.array(trainDf)
+trainOutputs = trainData[trainIdx, 5]
+valOutputs = trainData[valIdx, 5]
 
-# Initialize output
-yTest = -np.ones((len(testQs1), 2)).astype(int)
-for i in range(len(testQs1)):
-    yTest[i, 0] = i
 
 # To encode questions into char indices
 def encodeQs(questions, inputLength, alphabet):
@@ -121,7 +168,7 @@ def encodeQs(questions, inputLength, alphabet):
     # For each question
     for (q, question) in enumerate(questions):
         print(str(q) + " of " + str(len(questions)) + " = " +
-              "{0:.2f}".format(float(q + 1) / len(questions)), end='\r')
+              "{0:.2f}".format(float(q) / len(questions)), end='\r')
         # For each character in question, in reversed order (so latest
         # character is first)
         for (c, char) in enumerate(reversed(question[:inputLength])):
@@ -130,15 +177,20 @@ def encodeQs(questions, inputLength, alphabet):
                 encodedQs[q][c] = alphabet.index(char)
             else:
                 encodedQs[q][c] = 0
+    print("Done encoding.")
     return encodedQs
 
-
 # Make encoded questions out of training questions 1 and 2
-print("encoding qs - 1 of 2:")
-encodedTestQ1s = encodeQs(testQs1, inputLength, alphabet)
-print("encoded q1, encoding q2:")
-encodedTestQ2s = encodeQs(testQs2, inputLength, alphabet)
-print("encoded q1 and q2")
+print("encoding train qs - 1 of 2:")
+encodedTrainQ1s = encodeQs(trainQ1s, inputLength, alphabet)
+print("encoded train q1, encoding train q2:")
+encodedTrainQ2s = encodeQs(trainQ2s, inputLength, alphabet)
+print("encoded train q1 and q2")
+print("encoding val qs - 1 of 2:")
+encodedValQ1s = encodeQs(valQ1s, inputLength, alphabet)
+print("encoded val q1, encoding val q2:")
+encodedValQ2s = encodeQs(valQ2s, inputLength, alphabet)
+print("encoded val q1 and q2")
 
 # MODEL
 
@@ -161,21 +213,10 @@ def createBaseNetworkSmall(inputLength, inputDim):
     baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
         mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
     baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(1024, activation='relu'))
-    baseNetwork.add(BatchNormalization())
+    baseNetwork.add(Dense(64, activation='relu'))
     baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(1024, activation='relu'))
-    baseNetwork.add(BatchNormalization())
+    baseNetwork.add(Dense(64, activation='relu'))
     baseNetwork.add(Dropout(0.5))
     return baseNetwork
 
@@ -202,7 +243,7 @@ distance = Lambda(euclidean_distance,
 model = Model([inputA, inputB], distance)
 
 model.load_weights(
-    "charCNN-smAl-C256P3C256P3C256C265C256C256P3f1024BnDo0.5f1024BnDo0.5-eucDist-val0.2-epoch29-l0.0745-vl0.4404.hdf5")
+    "charCNN-smAl-C256P3C256P3f64BnDo0.5f64-eucDist-val0.2-epoch78-l0.0704-vl0.2788.hdf5")
 
 preds = model.predict(
     [encodedTestQ1s, encodedTestQ2s], verbose=1)
@@ -211,3 +252,13 @@ yTest[:, 1] = np.reshape((preds < 0.5).astype(int), (len(preds),))
 
 np.savetxt("PREDS_Euc.csv", yTest, fmt='%i',
            delimiter=',', header="test_id,is_duplicate", comments='')
+
+myOutLayer = model.layers[5]
+f = K.function(model.inputs, [myOutLayer.output])
+f([encodedValQ1s[10:20], encodedValQ2s[10:20]], valOutputs[10:20])
+
+inp = model.input                                           # input placeholder
+outputs = [layer.output for layer in model.layers]          # all layer outputs
+functors = [K.function([inp]+ [K.learning_phase()], [out]) for out in outputs]  # evaluation functions
+layer_outs = [func([encodedValQ1s, encodedValQ2s]) for func in functors]
+
