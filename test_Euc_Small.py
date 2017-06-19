@@ -13,7 +13,7 @@ import math
 # from IPython.display import clear_output
 
 # tensorflow
-# import tensorflow as tf
+import tensorflow as tf
 #     with tf.device('/gpu:0'):
 
 # Keras
@@ -48,28 +48,26 @@ print(alphabet)
 # Params
 inputDim = len(alphabet)  # number of letters (characters) in alphabet
 
-EMBEDDING_FILE = '/home/voletiv/Downloads/GoogleNews-vectors-negative300.bin'
-
 # LOAD TRAINING AND TESTING DATA
 
 # Download train.csv and test.csv from
 # https://www.kaggle.com/c/quora-question-pairs/
-TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
+# TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
 TEST_DATA_FILE = 'kaggleQuoraTest.csv'
-trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
+# trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
 testDf = pd.read_csv(TEST_DATA_FILE, sep=',')
 
 # Check for any null values
-print(trainDf.isnull().sum())
-# print(testDf.isnull().sum())
+# print(trainDf.isnull().sum())
+print(testDf.isnull().sum())
 
 # Add the string 'empty' to empty strings
-trainDf = trainDf.fillna('empty')
+# trainDf = trainDf.fillna('empty')
 testDf = testDf.fillna('empty')
 
-# Load idx of train and val
-trainIdx = np.load("trainIdx.npy")
-valIdx = np.load("valIdx.npy")
+# # Load idx of train and val
+# trainIdx = np.load("trainIdx.npy")
+# valIdx = np.load("valIdx.npy")
 
 
 # To clean data
@@ -123,24 +121,25 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
 
 # Clean text
 print("Cleaning text...")
-nOfTrainQs = len(trainDf['question1'])
+
+# nOfTrainQs = len(trainDf['question1'])
+# trainFullQ1s = []
+# for i, q in enumerate(trainDf['question1']):
+#     print("Cleaning Train Q1s: {0:.2f}".format(
+#         float(i) / nOfTrainQs), end='\r')
+#     trainFullQ1s.append(text_to_wordlist(q))
+
+# trainFullQ2s = []
+# for i, q in enumerate(trainDf['question2']):
+#     print("Cleaning Train Q2s: {0:.2f}".format(
+#         float(i) / nOfTrainQs), end='\r')
+#     trainFullQ2s.append(text_to_wordlist(q))
+
 nOfTestQs = len(testDf['question1'])
-trainFullQ1s = []
-for i, q in enumerate(trainDf['question1']):
-    print("Cleaning Train Q1s: {0:.2f}".format(
-        float(i) / nOfTrainQs), end='\r')
-    trainFullQ1s.append(text_to_wordlist(q))
-
-trainFullQ2s = []
-for i, q in enumerate(trainDf['question2']):
-    print("Cleaning Train Q2s: {0:.2f}".format(
-        float(i) / nOfTrainQs), end='\r')
-    trainFullQ2s.append(text_to_wordlist(q))
-
 testQ1s = []
 for i, q in enumerate(testDf['question2']):
     print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
-    testQ2s.append(text_to_wordlist(q))
+    testQ1s.append(text_to_wordlist(q))
 
 testQ2s = []
 for i, q in enumerate(testDf['question2']):
@@ -149,16 +148,16 @@ for i, q in enumerate(testDf['question2']):
 
 print("Cleaned text.")
 
-# Make train and val data
-trainQ1s = [trainFullQ1s[i] for i in trainIdx]
-trainQ2s = [trainFullQ2s[i] for i in trainIdx]
-valQ1s = [trainFullQ1s[i] for i in valIdx]
-valQ2s = [trainFullQ2s[i] for i in valIdx]
+# # Make train and val data
+# trainQ1s = [trainFullQ1s[i] for i in trainIdx]
+# trainQ2s = [trainFullQ2s[i] for i in trainIdx]
+# valQ1s = [trainFullQ1s[i] for i in valIdx]
+# valQ2s = [trainFullQ2s[i] for i in valIdx]
 
-# Outputs (whether duplicate or not)
-trainData = np.array(trainDf)
-trainOutputs = trainData[trainIdx, 5]
-valOutputs = trainData[valIdx, 5]
+# # Outputs (whether duplicate or not)
+# trainData = np.array(trainDf)
+# trainOutputs = trainData[trainIdx, 5]
+# valOutputs = trainData[valIdx, 5]
 
 
 # To encode questions into char indices
@@ -180,17 +179,25 @@ def encodeQs(questions, inputLength, alphabet):
     print("Done encoding.")
     return encodedQs
 
-# Make encoded questions out of training questions 1 and 2
-print("encoding train qs - 1 of 2:")
-encodedTrainQ1s = encodeQs(trainQ1s, inputLength, alphabet)
-print("encoded train q1, encoding train q2:")
-encodedTrainQ2s = encodeQs(trainQ2s, inputLength, alphabet)
-print("encoded train q1 and q2")
-print("encoding val qs - 1 of 2:")
-encodedValQ1s = encodeQs(valQ1s, inputLength, alphabet)
-print("encoded val q1, encoding val q2:")
-encodedValQ2s = encodeQs(valQ2s, inputLength, alphabet)
-print("encoded val q1 and q2")
+# # Make encoded questions out of training questions 1 and 2
+# print("encoding train qs - 1 of 2:")
+# encodedTrainQ1s = encodeQs(trainQ1s, inputLength, alphabet)
+# print("encoded train q1, encoding train q2:")
+# encodedTrainQ2s = encodeQs(trainQ2s, inputLength, alphabet)
+# print("encoded train q1 and q2")
+# print("encoding val qs - 1 of 2:")
+# encodedValQ1s = encodeQs(valQ1s, inputLength, alphabet)
+# print("encoded val q1, encoding val q2:")
+# encodedValQ2s = encodeQs(valQ2s, inputLength, alphabet)
+# print("encoded val q1 and q2")
+
+# Encode test questions
+print("encoding test qs - 1 of 2:")
+encodedTestQ1s = encodeQs(testQ1s, inputLength, alphabet)
+print("encoded test q1, encoding test q2:")
+encodedTestQ2s = encodeQs(testQ2s, inputLength, alphabet)
+print("encoded test q1 and q2")
+
 
 # MODEL
 
@@ -213,11 +220,14 @@ def createBaseNetworkSmall(inputLength, inputDim):
     baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
         mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
     baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
+    baseNetwork.add(Dense(128, activation='relu'))
+    baseNetwork.add(Dropout(0.2))
+    baseNetwork.add(Dense(128, activation='relu'))
+    baseNetwork.add(Dropout(0.2))
     return baseNetwork
 
 baseNetwork = createBaseNetworkSmall(inputLength, inputDim)
@@ -242,13 +252,46 @@ distance = Lambda(euclidean_distance,
 
 model = Model([inputA, inputB], distance)
 
+print(model.summary())
+
+
+def contrastive_loss(y_true, y_pred):
+    '''Contrastive loss from Hadsell-et-al.'06
+    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    '''
+    margin = 1
+    return K.mean(y_true * K.square(y_pred) +
+                  (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+
+# Accuracy
+def eucAcc(y_true, y_pred):
+    thresh = 0.5
+    return K.mean(K.equal(y_true, tf.to_float(K.less(y_pred, thresh))), axis=-1)
+
+
+# Logloss
+def eucLL(y_true, y_pred):
+    myEps = 1e-15
+    probs = K.maximum(K.minimum(y_pred, 1 - myEps), myEps)
+    return K.mean(K.binary_crossentropy(probs, 1 - y_true), axis=-1)
+
+# Compile
+initLR = 0.001
+momentum = 0.5
+sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
+# rms = RMSprop()
+model.compile(loss=contrastive_loss, optimizer=sgd, metrics=[eucAcc, eucLL])
+
 model.load_weights(
-    "charCNN-smAl-C256P3C256P3f64BnDo0.5f64-eucDist-val0.2-epoch78-l0.0704-vl0.2788.hdf5")
+    "charCNN-maAl-C256-7-P3-C256-7-P3-C256-3-P3-f128-do0.2-f128-d0.2-eucDist-SGD-initLR0.001-epDrop2-epoch53-tl0.2169-tacc0.6452-tlogl0.6264-vl0.3732-vacc0.3484-vlogl0.9911.hdf5")
 
 preds = model.predict(
     [encodedTestQ1s, encodedTestQ2s], verbose=1)
 
-yTest[:, 1] = np.reshape((preds < 0.5).astype(int), (len(preds),))
+yTest = -np.ones((len(encodedTestQ1s), 2)).astype(int)
+yTest[:, 0] = np.array(list(range(len(encodedTestQ1s))))
+yTest[:, 1] = np.reshape((preds < 0.15).astype(int), (len(preds),))
 
-np.savetxt("PREDS_Euc.csv", yTest, fmt='%i',
+np.savetxt("PREDS_Euc_Small.csv", yTest, fmt='%i',
            delimiter=',', header="test_id,is_duplicate", comments='')

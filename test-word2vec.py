@@ -13,7 +13,7 @@ import math
 # from IPython.display import clear_output
 
 # tensorflow
-# import tensorflow as tf
+import tensorflow as tf
 #     with tf.device('/gpu:0'):
 
 # Keras
@@ -48,28 +48,26 @@ print(alphabet)
 # Params
 inputDim = len(alphabet)  # number of letters (characters) in alphabet
 
-EMBEDDING_FILE = '/home/voletiv/Downloads/GoogleNews-vectors-negative300.bin'
-
 # LOAD TRAINING AND TESTING DATA
 
 # Download train.csv and test.csv from
 # https://www.kaggle.com/c/quora-question-pairs/
-TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
+# TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
 TEST_DATA_FILE = 'kaggleQuoraTest.csv'
-trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
+# trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
 testDf = pd.read_csv(TEST_DATA_FILE, sep=',')
 
 # Check for any null values
-print(trainDf.isnull().sum())
-# print(testDf.isnull().sum())
+# print(trainDf.isnull().sum())
+print(testDf.isnull().sum())
 
 # Add the string 'empty' to empty strings
-trainDf = trainDf.fillna('empty')
+# trainDf = trainDf.fillna('empty')
 testDf = testDf.fillna('empty')
 
-# Load idx of train and val
-trainIdx = np.load("trainIdx.npy")
-valIdx = np.load("valIdx.npy")
+# # Load idx of train and val
+# trainIdx = np.load("trainIdx.npy")
+# valIdx = np.load("valIdx.npy")
 
 
 # To clean data
@@ -123,24 +121,12 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
 
 # Clean text
 print("Cleaning text...")
-nOfTrainQs = len(trainDf['question1'])
+
 nOfTestQs = len(testDf['question1'])
-trainFullQ1s = []
-for i, q in enumerate(trainDf['question1']):
-    print("Cleaning Train Q1s: {0:.2f}".format(
-        float(i) / nOfTrainQs), end='\r')
-    trainFullQ1s.append(text_to_wordlist(q))
-
-trainFullQ2s = []
-for i, q in enumerate(trainDf['question2']):
-    print("Cleaning Train Q2s: {0:.2f}".format(
-        float(i) / nOfTrainQs), end='\r')
-    trainFullQ2s.append(text_to_wordlist(q))
-
 testQ1s = []
 for i, q in enumerate(testDf['question2']):
     print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
-    testQ2s.append(text_to_wordlist(q))
+    testQ1s.append(text_to_wordlist(q))
 
 testQ2s = []
 for i, q in enumerate(testDf['question2']):
@@ -149,106 +135,128 @@ for i, q in enumerate(testDf['question2']):
 
 print("Cleaned text.")
 
-# Make train and val data
-trainQ1s = [trainFullQ1s[i] for i in trainIdx]
-trainQ2s = [trainFullQ2s[i] for i in trainIdx]
-valQ1s = [trainFullQ1s[i] for i in valIdx]
-valQ2s = [trainFullQ2s[i] for i in valIdx]
 
-# Outputs (whether duplicate or not)
-trainData = np.array(trainDf)
-trainOutputs = trainData[trainIdx, 5]
-valOutputs = trainData[valIdx, 5]
+# Text to sequence of word-idx
+testSeq1s = tokenizer.texts_to_sequences(testQ1s)
+testSeq2s = tokenizer.texts_to_sequences(testQ2s)
+
+# Padded sequences
+testPadSeq1s = pad_sequences(testSeq1s, maxlen=MAX_SEQUENCE_LENGTH)
+testPadSeq2s = pad_sequences(testSeq2s, maxlen=MAX_SEQUENCE_LENGTH)
+
+# # Prepare embeddings
+# print('Preparing embedding matrix')
+
+# nb_words = min(MAX_NB_WORDS, len(word_index)) + 1
+
+# embedding_matrix = np.zeros((nb_words, EMBEDDING_DIM))
+# for word, i in word_index.items():
+#     if word in word2vec.vocab:
+#         embedding_matrix[i] = word2vec.word_vec(word)
+
+# print('Null word embeddings: %d' %
+#       np.sum(np.sum(embedding_matrix, axis=1) == 0))
 
 
-# To encode questions into char indices
-def encodeQs(questions, inputLength, alphabet):
+# To encode questions into wordvecs
+def encodeQs(questions, MAX_SEQUENCE_LENGTH, EMBEDDING_DIM, embedding_matrix, word_index):
     # Initialize encoded questions array
-    encodedQs = np.zeros((len(questions), inputLength), dtype='int32')
+    encodedQs = np.zeros((len(questions), MAX_SEQUENCE_LENGTH, EMBEDDING_DIM), dtype='int32')
     # For each question
     for (q, question) in enumerate(questions):
         print(str(q) + " of " + str(len(questions)) + " = " +
               "{0:.2f}".format(float(q) / len(questions)), end='\r')
         # For each character in question, in reversed order (so latest
         # character is first)
-        for (c, char) in enumerate(reversed(question[:inputLength])):
+        for (w, word) in enumerate(question[:MAX_SEQUENCE_LENGTH]):
             # print(\"  \"+str(c))
-            if char in alphabet:
-                encodedQs[q][c] = alphabet.index(char)
-            else:
-                encodedQs[q][c] = 0
+            if word in word_index:
+                encodedQs[q][w] = embedding_matrix[word_index[word]]
     print("Done encoding.")
     return encodedQs
 
-# Make encoded questions out of training questions 1 and 2
-print("encoding train qs - 1 of 2:")
-encodedTrainQ1s = encodeQs(trainQ1s, inputLength, alphabet)
-print("encoded train q1, encoding train q2:")
-encodedTrainQ2s = encodeQs(trainQ2s, inputLength, alphabet)
-print("encoded train q1 and q2")
-print("encoding val qs - 1 of 2:")
-encodedValQ1s = encodeQs(valQ1s, inputLength, alphabet)
-print("encoded val q1, encoding val q2:")
-encodedValQ2s = encodeQs(valQ2s, inputLength, alphabet)
-print("encoded val q1 and q2")
+
 
 # MODEL
 
 # Inputs
-inputA = Input(shape=(inputLength,), dtype='int32')
-inputB = Input(shape=(inputLength,), dtype='int32')
+input1 = Input(shape=(MAX_SEQUENCE_LENGTH, EMBEDDING_DIM), dtype='int32')
+input2 = Input(shape=(MAX_SEQUENCE_LENGTH, EMBEDDING_DIM), dtype='int32')
 
-# One hot encoding
-oheInputA = Lambda(K.one_hot, arguments={
-                   'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputA)
-oheInputB = Lambda(K.one_hot, arguments={
-                   'num_classes': inputDim}, output_shape=(inputLength, inputDim))(inputB)
-
-
-def createBaseNetworkSmall(inputLength, inputDim):
-    baseNetwork = Sequential()
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu',  input_shape=(inputLength, inputDim),
-                           kernel_initializer=RandomNormal(mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
-        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
-    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
-    baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    return baseNetwork
-
-baseNetwork = createBaseNetworkSmall(inputLength, inputDim)
+baseNetwork = Sequential()
+baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu',  input_shape=(MAX_SEQUENCE_LENGTH, EMBEDDING_DIM),
+                       kernel_initializer=RandomNormal(mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+baseNetwork.add(MaxPooling1D(pool_size=2, strides=2))
+baseNetwork.add(Conv1D(256, 5, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+    mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+baseNetwork.add(MaxPooling1D(pool_size=2, strides=2))
+baseNetwork.add(Flatten())
+baseNetwork.add(Dense(256, activation='relu'))
+baseNetwork.add(Dropout(0.9))
+baseNetwork.add(BatchNormalization())
+baseNetwork.add(Dense(512, activation='relu'))
 
 # because we re-use the same instance `base_network`,
 # the weights of the network will be shared across the two branches
-processedA = baseNetwork(oheInputA)
-processedB = baseNetwork(oheInputB)
+processed1 = baseNetwork(input1)
+processed2 = baseNetwork(input2)
+
+# Concatenate
+conc = Concatenate()([processed1, processed2])
+x = Dropout(0.9)(conc)
+x = BatchNormalization()(x)
+
+# Dense
+x = Dense(512, activation='relu')(x)
+x = Dropout(0.9)(x)
+x = BatchNormalization()(x)
+
+predictions = Dense(1, activation='sigmoid')(x)
+
+# def euclidean_distance(vects):
+#     x, y = vects
+#     return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
 
 
-def euclidean_distance(vects):
-    x, y = vects
-    return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
+# def eucl_dist_output_shape(shapes):
+#     shape1, shape2 = shapes
+#     return (shape1[0], 1)
+
+# distance = Lambda(euclidean_distance,
+#                   output_shape=eucl_dist_output_shape)([processedA, processedB])
+
+model = Model([input1, input2], predictions)
+
+print(model.summary())
 
 
-def eucl_dist_output_shape(shapes):
-    shape1, shape2 = shapes
-    return (shape1[0], 1)
+# Accuracy
+def eucAcc(y_true, y_pred):
+    thresh = 0.5
+    return K.mean(K.equal(y_true, tf.to_float(K.less(thresh, y_pred))), axis=-1)
 
-distance = Lambda(euclidean_distance,
-                  output_shape=eucl_dist_output_shape)([processedA, processedB])
 
-model = Model([inputA, inputB], distance)
+# Logloss
+def eucLL(y_true, y_pred):
+    myEps = 1e-15
+    probs = K.maximum(K.minimum(y_pred, 1 - myEps), myEps)
+    return K.mean(K.binary_crossentropy(probs, y_true), axis=-1)
 
+# Compile
+# initLR = 0.001
+# momentum = 0.9
+# sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
+model.compile(loss='binary_crossentropy',
+              optimizer='nadam', metrics=[eucAcc, eucLL])
 model.load_weights(
-    "charCNN-smAl-C256P3C256P3f64BnDo0.5f64-eucDist-val0.2-epoch78-l0.0704-vl0.2788.hdf5")
+    "word2vecCNN-C256-3-P2-C256-5-P2-f256-Do0.5-Bn-f256-conc-Do0.5-Bn-f1024-Do0.5-Bn-f1-nadam-epoch05-tl0.1784-tacc0.9280-tlogl0.1784-vl1.1343-vacc0.6095-vlogl1.1343.hdf5")
 
 preds = model.predict(
-    [encodedTestQ1s, encodedTestQ2s], verbose=1)
+    [testPadSeq1s, testPadSeq2s], verbose=1)
 
-yTest[:, 1] = np.reshape((preds < 0.5).astype(int), (len(preds),))
+yTest = -np.ones((len(testPadSeq1s), 2)).astype(int)
+yTest[:, 0] = np.array(list(range(len(testPadSeq1s))))
+yTest[:, 1] = np.reshape((preds < 0.15).astype(int), (len(preds),))
 
-np.savetxt("PREDS_Euc.csv", yTest, fmt='%i',
+np.savetxt("PREDS_word2vecCNN.csv", yTest, fmt='%i',
            delimiter=',', header="test_id,is_duplicate", comments='')

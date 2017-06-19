@@ -13,8 +13,8 @@ import math
 # from IPython.display import clear_output
 
 # tensorflow
-# import tensorflow as tf
-#     with tf.device('/gpu:0'):
+import tensorflow as tf
+# with tf.device('/gpu:0'):
 
 # Keras
 from keras import backend as K
@@ -57,7 +57,7 @@ EMBEDDING_FILE = '/home/voletiv/Downloads/GoogleNews-vectors-negative300.bin'
 TRAIN_DATA_FILE = 'kaggleQuoraTrain.csv'
 TEST_DATA_FILE = 'kaggleQuoraTest.csv'
 trainDf = pd.read_csv(TRAIN_DATA_FILE, sep=',')
-testDf = pd.read_csv(TEST_DATA_FILE, sep=',')
+# testDf = pd.read_csv(TEST_DATA_FILE, sep=',')
 
 # Check for any null values
 print(trainDf.isnull().sum())
@@ -65,7 +65,7 @@ print(trainDf.isnull().sum())
 
 # Add the string 'empty' to empty strings
 trainDf = trainDf.fillna('empty')
-testDf = testDf.fillna('empty')
+# testDf = testDf.fillna('empty')
 
 # Load idx of train and val
 trainIdx = np.load("trainIdx.npy")
@@ -124,7 +124,6 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
 # Clean text
 print("Cleaning text...")
 nOfTrainQs = len(trainDf['question1'])
-nOfTestQs = len(testDf['question1'])
 trainFullQ1s = []
 for i, q in enumerate(trainDf['question1']):
     print("Cleaning Train Q1s: {0:.2f}".format(
@@ -137,15 +136,16 @@ for i, q in enumerate(trainDf['question2']):
         float(i) / nOfTrainQs), end='\r')
     trainFullQ2s.append(text_to_wordlist(q))
 
-testQ1s = []
-for i, q in enumerate(testDf['question2']):
-    print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
-    testQ2s.append(text_to_wordlist(q))
+# nOfTestQs = len(testDf['question1'])
+# testQ1s = []
+# for i, q in enumerate(testDf['question2']):
+#     print("Cleaning Test Q1s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
+#     testQ2s.append(text_to_wordlist(q))
 
-testQ2s = []
-for i, q in enumerate(testDf['question2']):
-    print("Cleaning Test Q2s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
-    testQ2s.append(text_to_wordlist(q))
+# testQ2s = []
+# for i, q in enumerate(testDf['question2']):
+#     print("Cleaning Test Q2s: {0:.2f}".format(float(i) / nOfTestQs), end='\r')
+#     testQ2s.append(text_to_wordlist(q))
 
 print("Cleaned text.")
 
@@ -213,11 +213,14 @@ def createBaseNetworkSmall(inputLength, inputDim):
     baseNetwork.add(Conv1D(256, 7, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
         mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
     baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
+    baseNetwork.add(Conv1D(256, 3, strides=1, padding='valid', activation='relu', kernel_initializer=RandomNormal(
+        mean=0.0, stddev=0.05), bias_initializer=RandomNormal(mean=0.0, stddev=0.05)))
+    baseNetwork.add(MaxPooling1D(pool_size=3, strides=3))
     baseNetwork.add(Flatten())
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
-    baseNetwork.add(Dense(64, activation='relu'))
-    baseNetwork.add(Dropout(0.5))
+    baseNetwork.add(Dense(128, activation='relu'))
+    baseNetwork.add(Dropout(0.2))
+    baseNetwork.add(Dense(128, activation='relu'))
+    baseNetwork.add(Dropout(0.2))
     return baseNetwork
 
 baseNetwork = createBaseNetworkSmall(inputLength, inputDim)
@@ -242,13 +245,64 @@ distance = Lambda(euclidean_distance,
 
 model = Model([inputA, inputB], distance)
 
+print(model.summary())
+
+
+def contrastive_loss(y_true, y_pred):
+    '''Contrastive loss from Hadsell-et-al.'06
+    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    '''
+    margin = 1
+    return K.mean(y_true * K.square(y_pred) +
+                  (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+
+# Accuracy
+def eucAcc(y_true, y_pred):
+    thresh = 0.5
+    return K.mean(K.equal(y_true, tf.to_float(K.less(y_pred, thresh))), axis=-1)
+
+
+# Logloss
+def eucLL(y_true, y_pred):
+    myEps = 1e-15
+    probs = K.maximum(K.minimum(y_pred, 1 - myEps), myEps)
+    return K.mean(K.binary_crossentropy(probs, 1 - y_true), axis=-1)
+
+# Compile
+initLR = 0.001
+momentum = 0.5
+sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
+# rms = RMSprop()
+model.compile(loss=contrastive_loss, optimizer=sgd, metrics=[eucAcc, eucLL])
+
+# Model Checkpoint
+filepath = "charCNN-maAl-C256-7-P3-C256-7-P3-C256-3-P3-f128-do0.2-f128-d0.2-eucDist-SGD-initLR0.001-epDrop2-epoch{epoch:02d}-tl{loss:.4f}-tacc{eucAcc:.4f}-tlogl{eucLL:.4f}-vl{val_loss:.4f}-vacc{val_eucAcc:.4f}-vlogl{val_eucLL:.4f}.hdf5"
+checkpoint = ModelCheckpoint(
+    filepath, verbose=1, save_best_only=False, save_weights_only=True)
+
+
+# Halve lr every 3 epochs
+def step_decay(epoch):
+    initial_lrate = initLR
+    drop = 0.5
+    epochs_drop = 3.0
+    lrate = initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop))
+    print("lr dropped to " + str(lrate))
+    return lrate
+
+lRate = LearningRateScheduler(step_decay)
+
+# Callbacks
+callbacks_list = [checkpoint, lRate]
+
+# SKIP: Load weights
 model.load_weights(
-    "charCNN-smAl-C256P3C256P3f64BnDo0.5f64-eucDist-val0.2-epoch78-l0.0704-vl0.2788.hdf5")
+    "charCNN-maAl-C256-7-P3-C256-7-P3-C256-3-P3-f128-do0.2-f128-d0.2-eucDist-SGD-initLR0.001-epDrop2-epoch09-tl0.2192-tacc0.6369-tlogl0.6312-vl0.3784-vacc0.3438-vlogl1.0049.hdf5")
 
-preds = model.predict(
-    [encodedTestQ1s, encodedTestQ2s], verbose=1)
-
-yTest[:, 1] = np.reshape((preds < 0.5).astype(int), (len(preds),))
-
-np.savetxt("PREDS_Euc.csv", yTest, fmt='%i',
-           delimiter=',', header="test_id,is_duplicate", comments='')
+# Train
+model.fit([encodedTrainQ1s, encodedTrainQ2s], trainOutputs,
+          batch_size=minibatchSize, epochs=nEpochs, verbose=1,
+          callbacks=callbacks_list, validation_data=(
+    [encodedValQ1s, encodedValQ2s], valOutputs),
+    initial_epoch=10)

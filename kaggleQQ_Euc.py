@@ -253,13 +253,6 @@ model = Model([inputA, inputB], distance)
 
 print(model.summary())
 
-# Compile
-# initLR = 0.001
-# momentum = 0.9
-# sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
-# model.compile(loss='binary_crossentropy',
-#               optimizer='nadam', metrics=['accuracy'])
-
 
 def contrastive_loss(y_true, y_pred):
     '''Contrastive loss from Hadsell-et-al.'06
@@ -282,24 +275,40 @@ def eucLL(y_true, y_pred):
     probs = K.maximum(K.minimum(y_pred, 1 - myEps), myEps)
     return K.mean(K.binary_crossentropy(probs, 1 - y_true), axis=-1)
 
-rms = RMSprop()
-model.compile(loss=contrastive_loss, optimizer=rms, metrics=[eucAcc, eucLL])
+# Compile
+initLR = 0.001
+momentum = 0.5
+sgd = SGD(lr=initLR, momentum=momentum, decay=0, nesterov=False)
+# rms = RMSprop()
+model.compile(loss=contrastive_loss, optimizer=sgd, metrics=[eucAcc, eucLL])
 
 # Model Checkpoint
-filepath = "charCNN-maAl-smallLeCun-eucDist-val0.2-epoch{epoch:02d}-tl{loss:.4f}-tacc{eucAcc:.4f}-tlogl{eucLL:.4f}-vl{val_loss:.4f}-vacc{val_eucAcc:.4f}-vlogl{val_eucLL:.4f}.hdf5"
+filepath = "charCNN-maAl-smallLeCun-eucDist-val0.2-SGD-initLR0.001-epDrop2-epoch{epoch:02d}-tl{loss:.4f}-tacc{eucAcc:.4f}-tlogl{eucLL:.4f}-vl{val_loss:.4f}-vacc{val_eucAcc:.4f}-vlogl{val_eucLL:.4f}.hdf5"
 checkpoint = ModelCheckpoint(
     filepath, verbose=1, save_best_only=False, save_weights_only=True)
 
-# Callbacks
-# callbacks_list = [checkpoint]
 
-# # SKIP: Load weights
-# model.load_weights(
-#     "charCNNSmaller-ohE-smAl-val0.2-epoch15-l0.3907-a0.8311-vl0.4616-va0.7891.hdf5")
+# Halve lr every 3 epochs
+def step_decay(epoch):
+    initial_lrate = initLR
+    drop = 0.5
+    epochs_drop = 2.0
+    lrate = initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop))
+    print("lr dropped to " + str(lrate))
+    return lrate
+
+lRate = LearningRateScheduler(step_decay)
+
+# Callbacks
+callbacks_list = [checkpoint, lRate]
+
+# SKIP: Load weights
+model.load_weights(
+    "charCNN-maAl-smallLeCun-eucDist-val0.2-SGD-initLR0.001-epoch06-tl0.1907-tacc0.7109-tlogl0.5908-vl0.4764-vacc0.2433-vlogl1.3193.hdf5")
 
 # Train
 model.fit([encodedTrainQ1s, encodedTrainQ2s], trainOutputs,
           batch_size=minibatchSize, epochs=nEpochs, verbose=1,
-          callbacks=[checkpoint], validation_data=(
+          callbacks=callbacks_list, validation_data=(
     [encodedValQ1s, encodedValQ2s], valOutputs),
-    initial_epoch=0)
+    initial_epoch=4)
