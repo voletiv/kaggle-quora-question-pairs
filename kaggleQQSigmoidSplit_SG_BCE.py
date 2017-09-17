@@ -14,7 +14,7 @@ print("imported pre-reqs")
 
 # tensorflow
 # import tensorflow as tf
-#     with tf.device('/gpu:0'):
+# with tf.device('/gpu:0'):
 
 # Keras
 from keras import backend as K
